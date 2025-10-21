@@ -1,6 +1,5 @@
 import gpytorch
 import torch
-from sklearn.preprocessing import MinMaxScaler
 
 import casadi
 import numpy as np
