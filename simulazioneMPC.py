@@ -96,9 +96,10 @@ if __name__ == "__main__":
             if k>Param["T_C0"]-1:
             
                 controller.bayesian_correction(k,y,u)
-
-
-        u_control, slack, y_nnarx, computation_time[k] = controller.mpc_controller(k, Param["T_C0"], y, u, y_rnn)
+        ### Compute the control law every 15 minutes ###
+        if np.mod(k,3)==0:
+            
+            u_control, slack, y_nnarx, computation_time[k] = controller.mpc_controller(k, Param["T_C0"], y, u, y_rnn)
         u[:, k] = u_control
         # print( u[4:6, k])
         # print(controller.y_prec)
