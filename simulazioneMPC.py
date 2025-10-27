@@ -98,7 +98,7 @@ if __name__ == "__main__":
                 controller.bayesian_correction(k,y,u)
         ### Compute the control law every 15 minutes ###
         
-            u_control, slack, y_nnarx, computation_time[k] = controller.mpc_controller(k, Param["T_C0"], y, u, y_rnn)
+        u_control, slack, y_nnarx, computation_time[k] = controller.mpc_controller(k, Param["T_C0"], y, u, y_rnn)
         u[:, k] = u_control
         # print( u[4:6, k])
         # print(controller.y_prec)
@@ -128,7 +128,7 @@ if __name__ == "__main__":
         print(final_cost[k])
         print(controller.J_prec)
         if np.mod(k,3)==0 and k==0:
-            #send the control law
-            u[:, k] = u_control
+            #send the control law to the system
+            print(u_control)
     ### Save Data ###
     SaveData(y,u,s,Pb_pred,final_cost)
