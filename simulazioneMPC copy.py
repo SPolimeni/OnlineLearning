@@ -94,8 +94,8 @@ if __name__ == "__main__":
         print(k)
 
         y_dict = main_status_readings()
-        y[1,k] = y_dict['T_delivery']
-        y[0,k] = y_dict['T_return']
+        y[0,k] = y_dict['T_delivery']
+        y[1,k] = y_dict['T_return']
         y[2,k] = y_dict['flow']
 
 
