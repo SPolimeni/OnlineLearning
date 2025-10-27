@@ -5,7 +5,7 @@ import casadi
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.io import loadmat
-from pyfmi import load_fmu
+# from pyfmi import load_fmu
 import time
 
 
