@@ -618,7 +618,7 @@ class MPC:
                 self.opti.subject_to( cp * self.q_eb*casadi.DM.ones(1,1)* (self.u[5,ii]-self.y[1,j-1]) == self.Pb[1,j])
         self.opti.subject_to(self.Pb_min <= self.Pb[0,:])
         self.opti.subject_to(self.Pb_max >= self.Pb[0,:])   
-        self.opti.subject_to(self.Pb_min<= self.Pb[1,:])
+        self.opti.subject_to(self.Pb_min_eb<= self.Pb[1,:])
         self.opti.subject_to(self.Pb_max_eb >= self.Pb[1,:]) 
 
     def SetCostFunction(self):
