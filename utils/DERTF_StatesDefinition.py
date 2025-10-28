@@ -95,7 +95,21 @@ def main_status_readings():
         print("Connessione a InfluxDB fallita.")
         exit()
 
-    y_dict = SimpleStatusReadings(InfluxDB_connector)
+    
+    max_retries = 20
+    success = False
+    for attempt in range(max_retries):
+        try:
+            y_dict = SimpleStatusReadings(InfluxDB_connector)
+            success = True
+            break
+        except Exception as e:
+            print(f"Attempt {attempt + 1} failed: {e}")
+            success = False
+
+    if not success:
+        y_dict = None
+        print("Failed to read data from InfluxDB after multiple attempts.")
 
     return y_dict
 
