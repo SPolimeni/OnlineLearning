@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import csv
 
 from class_MPC import MPC
+from utils.DERTF_StatesDefinition import main_status_readings
 
 
 
@@ -64,10 +65,10 @@ if __name__ == "__main__":
         "Pb_min":60e3,
         "Pb_max_eb":50e3,
         "Pb_min_eb":30e3,
-        "nnarx_mat": 'OnlineLearning\\NNARX_9-9_H3_bs20_Ts300_Ns300_20251020_154518\\net.mat',
-        "c_el": np.genfromtxt('OnlineLearning\\20250501_20250501_MGP_PrezziZonali_Nord.csv', delimiter=';', usecols=(2), skip_header=2),
-        "Potenza":np.genfromtxt('OnlineLearning\\DHN_ground_truth.csv', delimiter=',', usecols=(3,4,5,6), skip_header=28),#potenza all'istante k
-        "Model":'GP',
+        "nnarx_mat": 'NNARX_9-9_H3_bs20_Ts300_Ns300_20251020_154518\\net.mat',
+        "c_el": np.genfromtxt('20250501_20250501_MGP_PrezziZonali_Nord.csv', delimiter=';', usecols=(2), skip_header=2),
+        "Potenza":np.genfromtxt('DHN_ground_truth.csv', delimiter=',', usecols=(3,4,5,6), skip_header=28),#potenza all'istante k
+        "Model":'NNARX',
         "T_C0":4, #istante in cui inizio ad applicare la legge di controllo
         "L_prev": np.eye(10),
         "Q_prev": np.zeros([10,3]),
@@ -91,16 +92,19 @@ if __name__ == "__main__":
    
     for k in range(0, num_steps - 1):
         print(k)
+
+        y_dict = main_status_readings()
+        y[0,k] = y_dict['T_delivery']
+        y[1,k] = y_dict['T_return']
+        y[2,k] = y_dict['flow']
+
+
         if Param['Model']=='BNN':
         
             if k>Param["T_C0"]-1:
             
                 controller.bayesian_correction(k,y,u)
         ### Compute the control law every 15 minutes ###
-        # controller.mpc_controller.xk = meglio sostiuire y
-        # T mandata ultimo carico
-        # T ritorno (complessiva)
-        # m flow ritorno (complessivo)
 
         u_control, slack, y_nnarx, computation_time[k] = controller.mpc_controller(k, Param["T_C0"], y, u, y_rnn)
 

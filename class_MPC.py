@@ -565,61 +565,62 @@ class MPC:
         self.Pb  = self.opti.variable(2, self.N)
     def SetConstraints(self):
          ### Constraints ###
-            self.opti.subject_to(self.Ts_min- self.s[0,:] <= self.y[0,:])
-            self.opti.subject_to(self.Ts_max + self.s[0,:] >= self.y[0,:]) 
-            self.opti.subject_to(self.Tr_min <= self.y[1,:])
-            self.opti.subject_to(self.Tr_max  >= self.y[1,:])   
-            self.opti.subject_to(self.Ts_min <= self.u[5,:])
-            self.opti.subject_to(self.Ts_max_eb>= self.u[5,:])
-            self.opti.subject_to(self.Ts_min<= self.u[4,:])
-            self.opti.subject_to(self.Ts_max >= self.u[4,:])
-            self.opti.subject_to(self.Potenze[:,self.t]== self.u[0:4, 0])
-            self.opti.subject_to(self.Potenze[:,self.t+3]+1000== self.u[0:4, 1])
-            self.opti.subject_to(self.Potenze[:,self.t+6]+1000== self.u[0:4, 2])
-            self.opti.subject_to(self.Potenze[:,self.t+9]+1000== self.u[0:4, 3])
-            self.opti.subject_to(self.m_min<= self.y[2,:])
-            self.opti.subject_to(self.m_max >= self.y[2,:])   
-            y_N,output_rnn= self.model_rnn(self.t,self.data, self.u, self.y_prec,self.u_prec,self.xk,self.uk,self.y,self.N/self.Nb,self.y_rnn,self.theta)
-            # System dynamics constraint
-            if self.Model=='GP':
-                self.opti.subject_to(self.y == y_N[:,0:self.N])
-                self.opti.subject_to(self.y_nnarx == output_rnn[:,0:self.N])
+        self.opti.subject_to(self.Ts_min- self.s[0,:] <= self.y[0,:])
+        self.opti.subject_to(self.Ts_max + self.s[0,:] >= self.y[0,:]) 
+        self.opti.subject_to(self.Tr_min <= self.y[1,:])
+        self.opti.subject_to(self.Tr_max  >= self.y[1,:])   
+        self.opti.subject_to(self.Ts_min <= self.u[5,:])
+        self.opti.subject_to(self.Ts_max_eb>= self.u[5,:])
+        self.opti.subject_to(self.Ts_min<= self.u[4,:])
+        self.opti.subject_to(self.Ts_max >= self.u[4,:])
+        self.opti.subject_to(self.Potenze[:,self.t]== self.u[0:4, 0])
+        self.opti.subject_to(self.Potenze[:,self.t+3]+1000== self.u[0:4, 1])
+        self.opti.subject_to(self.Potenze[:,self.t+6]+1000== self.u[0:4, 2])
+        self.opti.subject_to(self.Potenze[:,self.t+9]+1000== self.u[0:4, 3])
+        self.opti.subject_to(self.m_min<= self.y[2,:])
+        self.opti.subject_to(self.m_max >= self.y[2,:])   
+        y_N,output_rnn= self.model_rnn(self.t,self.data, self.u, self.y_prec,self.u_prec,self.xk,self.uk,self.y,self.N/self.Nb,self.y_rnn,self.theta)
+        # System dynamics constraint
+        if self.Model=='GP':
+            self.opti.subject_to(self.y == y_N[:,0:self.N])
+            self.opti.subject_to(self.y_nnarx == output_rnn[:,0:self.N])
+        else:
+            self.opti.subject_to(self.y == output_rnn[:,0:self.N])
+            self.opti.subject_to(self.y_nnarx== output_rnn[:,0:self.N])
+
+        self.opti.subject_to(self.s[:,0] >= 0)
+        delta = 5
+        val_prec = float(self.u_prec[5, 0])                       
+        val_correnti = self.u[5, 0:self.u_opt-1]                          
+
+        vect = casadi.horzcat(val_prec, val_correnti)
+        self.opti.subject_to(-delta <= self.u[5,:] - vect)
+        self.opti.subject_to( delta >= self.u[5,:] - vect)
+        
+        # # #Δu_min < Δu < Δu_max
+        delta = 5
+        val_prec = float(self.u_prec[4, 0])                       
+        val_correnti = self.u[4, 0:self.u_opt-1]                          
+
+        vect = casadi.horzcat(val_prec, val_correnti)
+        self.opti.subject_to(-delta <= self.u[4,:] - vect)
+        self.opti.subject_to( delta >= self.u[4,:] - vect)
+
+        cp=4186
+        for j in range(0,self.N):
+            ii = min(np.floor(j/self.Nb), self.N/self.Nb-1)
+            if j==0:
+                self.opti.subject_to( cp * casadi.minus(self.xk[2,self.t],self.q_eb*casadi.DM.ones(1,1))* (self.u[4,j]-self.xk[1, self.t]) == self.Pb[0,0])
+                self.opti.subject_to( cp * self.q_eb*casadi.DM.ones(1,1)* (self.u[5,0]-self.xk[1, self.t]) == self.Pb[1,0])
+
             else:
-                self.opti.subject_to(self.y == output_rnn[:,0:self.N])
-                self.opti.subject_to(self.y_nnarx== output_rnn[:,0:self.N])
+                self.opti.subject_to( cp * casadi.minus(self.y[2,j-1],self.q_eb*casadi.DM.ones(1,1))* (self.u[4,ii]-self.y[1, j-1]) == self.Pb[0,j])
+                self.opti.subject_to( cp * self.q_eb*casadi.DM.ones(1,1)* (self.u[5,ii]-self.y[1,j-1]) == self.Pb[1,j])
+        self.opti.subject_to(self.Pb_min <= self.Pb[0,:])
+        self.opti.subject_to(self.Pb_max >= self.Pb[0,:])   
+        self.opti.subject_to(self.Pb_min_eb<= self.Pb[1,:])
+        self.opti.subject_to(self.Pb_max_eb >= self.Pb[1,:]) 
 
-            self.opti.subject_to(self.s[:,0] >= 0)
-            delta = 5
-            val_prec = float(self.u_prec[5, 0])                       
-            val_correnti = self.u[5, 0:self.u_opt-1]                          
-
-            vect = casadi.horzcat(val_prec, val_correnti)
-            self.opti.subject_to(-delta <= self.u[5,:] - vect)
-            self.opti.subject_to( delta >= self.u[5,:] - vect)
-            
-            # # #Δu_min < Δu < Δu_max
-            delta = 5
-            val_prec = float(self.u_prec[4, 0])                       
-            val_correnti = self.u[4, 0:self.u_opt-1]                          
-
-            vect = casadi.horzcat(val_prec, val_correnti)
-            self.opti.subject_to(-delta <= self.u[4,:] - vect)
-            self.opti.subject_to( delta >= self.u[4,:] - vect)
-
-            cp=4186
-            for j in range(0,self.N):
-                ii = min(np.floor(j/self.Nb), self.N/self.Nb-1)
-                if j==0:
-                    self.opti.subject_to( cp * casadi.minus(self.xk[2,self.t],self.q_eb*casadi.DM.ones(1,1))* (self.u[4,j]-self.xk[1, self.t]) == self.Pb[0,0])
-                    self.opti.subject_to( cp * self.q_eb*casadi.DM.ones(1,1)* (self.u[5,0]-self.xk[1, self.t]) == self.Pb[1,0])
-
-                else:
-                    self.opti.subject_to( cp * casadi.minus(self.y[2,j-1],self.q_eb*casadi.DM.ones(1,1))* (self.u[4,ii]-self.y[1, j-1]) == self.Pb[0,j])
-                    self.opti.subject_to( cp * self.q_eb*casadi.DM.ones(1,1)* (self.u[5,ii]-self.y[1,j-1]) == self.Pb[1,j])
-            self.opti.subject_to(self.Pb_min <= self.Pb[0,:])
-            self.opti.subject_to(self.Pb_max >= self.Pb[0,:])   
-            self.opti.subject_to(self.Pb_min<= self.Pb[1,:])
-            self.opti.subject_to(self.Pb_max_eb >= self.Pb[1,:]) 
     def SetCostFunction(self):
         ### Cost Function  ### 
                 
@@ -690,14 +691,14 @@ class MPC:
             prob_opts = {
                 'expand': True,
                 'ipopt': {
-                    'print_level': 0,     # Disable printing
+                    'print_level': 3,     # Disable printing
                 },
                 'print_time': False       # Do not print the timestamp
             }
 
             # IPOPT settings
             ip_opts = {
-                'print_level': 0,           # Disable printing
+                'print_level': 3,           # Disable printing
                 'max_iter': int(1e4),       # Maximum iterations. Use int() to avoid float
                 'compl_inf_tol': 1e-5      # Desired threshold for the complementarity conditions
             }
@@ -743,8 +744,6 @@ class MPC:
         computation_time=end_time-start_time
 
         return  u_opt,slack,y_nnarx,computation_time
-
-
 
     def simulate_dynamics(self, k, initial_state, input_vector, A, Bu, Bx, C, steps, weights, n_states, ground_truth,theta):
         n_out = self.n_out
