@@ -78,7 +78,7 @@ def MPC_solve():
     
 
     if controller.Param['Model']=='BNN':
-        if k < controller.Param["T_C0"]-1:
+        if k > controller.Param["T_C0"]-1:
             controller.bayesian_correction(k,controller.y_out,controller.u_out)
 
     ### Compute the control law every 15 minutes ###
@@ -119,7 +119,7 @@ def MPC_solve():
     SaveData(controller.y_out, controller.u_out, controller.s_out, controller.Pb_pred_out, controller.final_cost, 
     controller.computation_time[k], k, controller.Param["Model"], controller.InitialDate)
 
-    if np.mod(k,controller.Param["T_C0"])==0 or k==0:
+    if np.mod(k,controller.Param["T_C0"]-1)==0 or k==0:
         #send the control law
         controller.u_out[:, k] = controller.u_control
 
