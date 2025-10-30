@@ -134,7 +134,7 @@ def MPC_solve():
 
 if __name__ == "__main__":
 
-    Opts = {'Debug':True}
+    Opts = {'Debug':False}
     
     Param={
         "Nb"        :3,
@@ -173,6 +173,14 @@ if __name__ == "__main__":
         default='NNARX',
         help="Set the model type: 'NNARX', 'GP', or 'BNN'",
     )
+    parser.add_argument(
+        "--Debug",
+        action="store_true",
+        default=False,
+        help="Run the script in debug mode with simulated data",
+    )
+    
+    Opts['Debug'] = parser.parse_args().Debug
     args = parser.parse_args()
     Param["Model"] = args.Model
 
