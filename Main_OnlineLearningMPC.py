@@ -221,7 +221,7 @@ if __name__ == "__main__":
         "Pb_min"    :60e3,
         "Pb_max_eb" :50e3,
         "Pb_min_eb" :30e3,
-        "nnarx_mat" :'NNARX_9-9_H3_bs20_Ts300_Ns300_20251020_154518\\net.mat',
+        "nnarx_mat" :os.path.join('NNARX_9-9_H3_bs20_Ts300_Ns300_20251020_154518','net.mat'),
         "c_el"      :np.genfromtxt('20250501_20250501_MGP_PrezziZonali_Nord.csv', delimiter=';', usecols=(2), skip_header=2),
         "Potenza"   :np.genfromtxt('DHN_ground_truth.csv', delimiter=',', usecols=(3,4,5,6), skip_header=28),#potenza all'istante k
         "Model"     :'NNARX',
