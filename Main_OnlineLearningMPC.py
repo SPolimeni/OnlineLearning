@@ -74,14 +74,14 @@ def SetPointsToDERTF(Solved=True):
     try: 
 
         k = controller.t_step-1
-        GetValue = controller.opti.value if Solved else controller.opti.value
+        GetValue = controller.opti.value if Solved else controller.opti.debug.value
 
         controller.SetPointsWriter.DataMap['Power_HL1']['Value'] = -1e-3 * GetValue(controller.u_out[0, k]) # W to kW
         controller.SetPointsWriter.DataMap['Power_HL2']['Value'] = -1e-3 * GetValue(controller.u_out[1, k]) # W to kW
         controller.SetPointsWriter.DataMap['Power_HL3']['Value'] = -1e-3 * GetValue(controller.u_out[2, k]) # W to kW
         controller.SetPointsWriter.DataMap['Power_HL4']['Value'] = -1e-3 * GetValue(controller.u_out[3, k]) # W to kW
-        controller.SetPointsWriter.DataMap['T_out_GB']['Value']  = GetValue(controller.u_out[4, k])
-        controller.SetPointsWriter.DataMap['T_out_EB']['Value']  = GetValue(controller.u_out[5, k])
+        controller.SetPointsWriter.DataMap['T_out_GB']['Value']  = GetValue(controller.u_out[4, k])+2
+        controller.SetPointsWriter.DataMap['T_out_EB']['Value']  = GetValue(controller.u_out[5, k])+2
     except Exception as e:
         tb = traceback.extract_tb(e.__traceback__)
         if tb:
