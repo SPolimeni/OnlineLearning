@@ -3,6 +3,7 @@ import csv
 import argparse
 import time
 import traceback
+import copy
 from datetime import datetime, timedelta
 from apscheduler.schedulers.background  import BackgroundScheduler
 
@@ -72,7 +73,7 @@ def SetPointsToDERTF(Solved=True):
 
     try: 
 
-        k = controller.t_step
+        k = controller.t_step-1
         GetValue = controller.opti.value if Solved else controller.opti.value
 
         controller.SetPointsWriter.DataMap['Power_HL1']['Value'] = -1e-3 * GetValue(controller.u_out[0, k]) # W to kW
@@ -109,8 +110,7 @@ def SetPointsToDERTF(Solved=True):
 
 def MPC_solve():
 
-    k = controller.t_step
-    u = controller.u_out
+    k = copy.deepcopy(controller.t_step)
 
     ReadStatus()
 
@@ -153,7 +153,7 @@ def MPC_solve():
     controller.u_out[:, k] = controller.u_control
     # print( u[4:6, k])
     # print(controller.y_prec)
-    if k < controller.Param["T_C0"]:
+    if k < controller.Param["T_C0"]-1:
         controller.s_out[:, k] = controller.slack[:, 0]
     else:
         controller.s_out[:, k] = controller.slack
@@ -181,7 +181,7 @@ def MPC_solve():
 
         if np.mod(k,controller.Param["T_C0"]-1)==0 or k==0:
             #send the control law
-            controller.u_out[:, k] = controller.u_control
+            # controller.u_out[:, k] = controller.u_control
 
             # U: 
             # prime 4 le potenze in W e negative
@@ -287,7 +287,7 @@ if __name__ == "__main__":
         scheduler = BackgroundScheduler()
 
         scheduler.add_job(ReadStatus, 'interval', seconds= 10, next_run_time=datetime.now() + timedelta(seconds=2))
-        scheduler.add_job(MPC_solve, 'interval', seconds=controller.time_step, next_run_time=datetime.now() + timedelta(seconds=5))
+        scheduler.add_job(MPC_solve, 'interval', seconds= controller.time_step, next_run_time=datetime.now() + timedelta(seconds=5))
         scheduler.start()
 
     try:

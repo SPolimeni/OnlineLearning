@@ -658,7 +658,7 @@ class MPC:
         self.SetOptimizationVariables()
         
             
-        if t<T_C0:
+        if t<T_C0-1:
             u_opt = self.u_prec[:,0]
             u_pred = self.u_prec
             y_pred = self.y_prec
