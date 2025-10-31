@@ -112,6 +112,7 @@ def MPC_solve():
     k = controller.t_step
     u = controller.u_out
 
+    # if not Opts['Debug']:
     ReadStatus()
 
     controller.y_out[0,k] = controller.y_dict['T_delivery']
@@ -205,7 +206,7 @@ def MPC_solve():
 
 if __name__ == "__main__":
 
-    Opts = {'Debug':False}
+    Opts = {'Debug':True}
     
     Param={
         "Nb"        :3,
@@ -251,7 +252,7 @@ if __name__ == "__main__":
         help="Run the script in debug mode with simulated data",
     )
     
-    Opts['Debug'] = parser.parse_args().Debug
+    # Opts['Debug'] = parser.parse_args().Debug
     args = parser.parse_args()
     Param["Model"] = args.Model
 
