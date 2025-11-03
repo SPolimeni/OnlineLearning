@@ -59,7 +59,7 @@ class MPC:
         self.Pb_min_eb=Param["Pb_min_eb"]
         self.data=loadmat(Param["nnarx_mat"])
         self.c_el=self.ensure2D(Param["c_el"])
-        self.Potenze=Param["Potenza"].T #potenza all'istante k
+        self.Potenze=Param["Potenza"].T+Param['P_Shift'] #potenza all'istante k
         self.Model=Param["Model"]
         self.T_C0=Param["T_C0"] #istante in cui inizio ad applicare la legge di controllo
         ### initial value MPC
@@ -559,6 +559,7 @@ class MPC:
         self.u = self.opti.variable(self.n_inp, self.u_opt)
         self.y = self.opti.variable(self.n_out, self.N)
         self.y_nnarx = self.opti.variable(self.n_out, self.N)
+        self.T_slack = self.opti.variable(1, self.N)
     
         self.s = self.opti.variable(self.n_slack, 1)
         self.J  = self.opti.variable(1, 1)
@@ -587,6 +588,11 @@ class MPC:
         else:
             self.opti.subject_to(self.y == output_rnn[:,0:self.N])
             self.opti.subject_to(self.y_nnarx== output_rnn[:,0:self.N])
+
+        # Vincolo per temperatura minima mandata ultimo carico
+        self.opti.subject_to(self.y[0,:] >= 70 - self.T_slack)
+        self.opti.subject_to(self.T_slack >= 0)
+        self.opti.subject_to(self.T_slack <= 5)
 
         self.opti.subject_to(self.s[:,0] >= 0)
         delta = 5
@@ -625,7 +631,7 @@ class MPC:
         ### Cost Function  ### 
                 
             gamma = 0.2
-            T_ref = 70
+            T_ref = 75
             c_gas=0.034 # $/kWh
             COP = 0.8
             gamma_pred_gas =c_gas*casadi.DM.ones(1,self.N)
@@ -633,7 +639,9 @@ class MPC:
             gamma_pred_el =self.c_el[r,0]/1000*casadi.DM.ones(1,self.N) #$/KWh
             print(self.c_el[r,0])
             alpha_slack = 0.01*casadi.MX.ones((1, self.n_slack)) 
-            self.opti.subject_to(self.J ==1*(gamma_pred_gas @(1/1000*self.Ts/3600 * self.Pb[0,:].T/COP)+gamma_pred_el @ (1/1000*self.Ts/3600 * self.Pb[1,:].T/1)+ gamma*(self.y[0,self.N-1] -T_ref*casadi.MX.ones((1, 1)))**2+alpha_slack@self.s))
+            self.opti.subject_to(self.J ==1*(gamma_pred_gas @(1/1000*self.Ts/3600 * self.Pb[0,:].T/COP)+
+            gamma_pred_el @ (1/1000*self.Ts/3600 * self.Pb[1,:].T/1)+ gamma*(self.y[0,self.N-1] -T_ref*casadi.MX.ones((1, 1)))**2+alpha_slack@self.s)+
+            casadi.sum1(self.T_slack)*1000)
         
     def mpc_controller(self, t,  T_C0, xk, uk, y_rnn):
         start_time = time.time()

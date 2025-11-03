@@ -12,7 +12,7 @@ def SaveData(y, u, s, Pb_pred, final_cost, computational_time, t_step, Model, In
         os.makedirs(folder_name, exist_ok=True)
     
     def save_with_timestamp(data, filename,k):
-        if 'final_cost' in filename:
+        if 'final_cost' in filename or 'computational_time' in filename:
             dati = data[k].reshape(1, -1)
         else:
             dati = data[:,k].reshape(1, -1)
@@ -35,5 +35,6 @@ def SaveData(y, u, s, Pb_pred, final_cost, computational_time, t_step, Model, In
     save_with_timestamp(Pb_pred, f'Pb_{InitialDate}.csv', t_step)
     save_with_timestamp(s, f'slack_{InitialDate}.csv', t_step)
     save_with_timestamp(final_cost, f'final_cost_{InitialDate}.csv', t_step)
+    save_with_timestamp(computational_time, f'computational_time_{InitialDate}.csv', t_step)
 
     print(np.mean(computational_time))
