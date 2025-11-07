@@ -121,7 +121,7 @@ class MPC:
     def gaussian_process(self,k,ys,y_mpc,input,u_mpc,ground_truth):
         ### Parameters ###
         h=3
-        window_size=36
+        window_size=60
         n_inp=5
         y_mpc=y_mpc.T
         n_out=3
