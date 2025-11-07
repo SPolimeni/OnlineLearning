@@ -229,7 +229,7 @@ if __name__ == "__main__":
         "nnarx_mat" :os.path.join('NNARX_9-9_H3_bs20_Ts150_Ns150_20251107_082445','net.mat'),
         "c_el"      :np.genfromtxt('20250501_20250501_MGP_PrezziZonali_Nord.csv', delimiter=';', usecols=(2), skip_header=2),
         "Potenza"   :np.genfromtxt('DHN_ground_truth.csv', delimiter=',', usecols=(3,4,5,6), skip_header=28),#potenza all'istante k
-        "P_Shift"   :2000, 
+        "P_Shift"   :4000, 
         "Model"     :'NNARX',
         "T_C0"      :4, #istante in cui inizio ad applicare la legge di controllo
         "L_prev"    :np.eye(10),
