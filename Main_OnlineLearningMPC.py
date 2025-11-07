@@ -82,6 +82,20 @@ def SetPointsToDERTF(Solved=True):
         controller.SetPointsWriter.DataMap['Power_HL4']['Value'] = -1e-3 * GetValue(controller.u_out[3, k]) # W to kW
         controller.SetPointsWriter.DataMap['T_out_GB']['Value']  = GetValue(controller.u_out[4, k])
         controller.SetPointsWriter.DataMap['T_out_EB']['Value']  = GetValue(controller.u_out[5, k])
+
+        if abs(controller.SetPointsWriter.DataMap['Power_HL1']['Value']) < 10:
+            controller.SetPointsWriter.DataMap['Power_HL1']['Value'] = 32
+        if abs(controller.SetPointsWriter.DataMap['Power_HL2']['Value']) < 10:
+            controller.SetPointsWriter.DataMap['Power_HL2']['Value'] = 32
+        if abs(controller.SetPointsWriter.DataMap['Power_HL3']['Value']) < 10:
+            controller.SetPointsWriter.DataMap['Power_HL3']['Value'] = 32
+        if abs(controller.SetPointsWriter.DataMap['Power_HL4']['Value']) < 10:
+            controller.SetPointsWriter.DataMap['Power_HL4']['Value'] = 32
+        if controller.SetPointsWriter.DataMap['T_out_GB']['Value'] < 45:
+            controller.SetPointsWriter.DataMap['T_out_GB']['Value'] = 72
+        if controller.SetPointsWriter.DataMap['T_out_EB']['Value'] < 45:
+            controller.SetPointsWriter.DataMap['T_out_EB']['Value'] = 72
+
     except Exception as e:
         tb = traceback.extract_tb(e.__traceback__)
         if tb:

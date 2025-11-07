@@ -206,7 +206,7 @@ def MPC_solve():
 
 if __name__ == "__main__":
 
-    Opts = {'Debug':True}
+    Opts = {'Debug':False}
     
     Param={
         "Nb"        :3,
@@ -227,7 +227,7 @@ if __name__ == "__main__":
         "Pb_min"    :60e3,
         "Pb_max_eb" :50e3,
         "Pb_min_eb" :30e3,
-        "nnarx_mat" :os.path.join('NNARX_9-9_H3_bs20_Ts300_Ns300_20251020_154518','net.mat'),
+        "nnarx_mat" :os.path.join('NNARX_9-9_H3_bs20_Ts150_Ns150_20251107_082445','net.mat'),
         "c_el"      :np.genfromtxt('20250501_20250501_MGP_PrezziZonali_Nord.csv', delimiter=';', usecols=(2), skip_header=2),
         "Potenza"   :np.genfromtxt('DHN_ground_truth.csv', delimiter=',', usecols=(3,4,5,6), skip_header=28),#potenza all'istante k
         "P_Shift"   :4000, 
@@ -289,7 +289,7 @@ if __name__ == "__main__":
         scheduler = BackgroundScheduler()
 
         scheduler.add_job(ReadStatus, 'interval', seconds= 10, next_run_time=datetime.now() + timedelta(seconds=2))
-        scheduler.add_job(MPC_solve, 'interval', seconds=controller.time_step, next_run_time=datetime.now() + timedelta(seconds=5))
+        scheduler.add_job(MPC_solve, 'interval', seconds=10, next_run_time=datetime.now() + timedelta(seconds=5))
         scheduler.start()
 
     try:
