@@ -3,6 +3,7 @@ import csv
 import argparse
 import time
 import traceback
+import copy
 from datetime import datetime, timedelta
 from apscheduler.schedulers.background  import BackgroundScheduler
 
@@ -72,15 +73,15 @@ def SetPointsToDERTF(Solved=True):
 
     try: 
 
-        k = controller.t_step
-        GetValue = controller.opti.value if Solved else controller.opti.value
+        k = controller.t_step-1
+        GetValue = controller.opti.value if Solved else controller.opti.debug.value
 
         controller.SetPointsWriter.DataMap['Power_HL1']['Value'] = -1e-3 * GetValue(controller.u_out[0, k]) # W to kW
         controller.SetPointsWriter.DataMap['Power_HL2']['Value'] = -1e-3 * GetValue(controller.u_out[1, k]) # W to kW
         controller.SetPointsWriter.DataMap['Power_HL3']['Value'] = -1e-3 * GetValue(controller.u_out[2, k]) # W to kW
         controller.SetPointsWriter.DataMap['Power_HL4']['Value'] = -1e-3 * GetValue(controller.u_out[3, k]) # W to kW
-        controller.SetPointsWriter.DataMap['T_out_GB']['Value']  = GetValue(controller.u_out[4, k])+2
-        controller.SetPointsWriter.DataMap['T_out_EB']['Value']  = GetValue(controller.u_out[5, k])+2
+        controller.SetPointsWriter.DataMap['T_out_GB']['Value']  = 70#GetValue(controller.u_out[4, k])
+        controller.SetPointsWriter.DataMap['T_out_EB']['Value']  = 70#GetValue(controller.u_out[5, k])
 
         if abs(controller.SetPointsWriter.DataMap['Power_HL1']['Value']) < 10:
             controller.SetPointsWriter.DataMap['Power_HL1']['Value'] = 32
@@ -91,10 +92,10 @@ def SetPointsToDERTF(Solved=True):
         if abs(controller.SetPointsWriter.DataMap['Power_HL4']['Value']) < 10:
             controller.SetPointsWriter.DataMap['Power_HL4']['Value'] = 32
         if controller.SetPointsWriter.DataMap['T_out_GB']['Value'] < 45:
-            controller.SetPointsWriter.DataMap['T_out_GB']['Value'] = 72
+            controller.SetPointsWriter.DataMap['T_out_GB']['Value'] = 70
         if controller.SetPointsWriter.DataMap['T_out_EB']['Value'] < 45:
-            controller.SetPointsWriter.DataMap['T_out_EB']['Value'] = 72
-            
+            controller.SetPointsWriter.DataMap['T_out_EB']['Value'] = 70
+
     except Exception as e:
         tb = traceback.extract_tb(e.__traceback__)
         if tb:
@@ -123,10 +124,8 @@ def SetPointsToDERTF(Solved=True):
 
 def MPC_solve():
 
-    k = controller.t_step
-    u = controller.u_out
+    k = copy.deepcopy(controller.t_step)
 
-    # if not Opts['Debug']:
     ReadStatus()
 
     controller.y_out[0,k] = controller.y_dict['T_delivery']
@@ -196,7 +195,7 @@ def MPC_solve():
 
         if np.mod(k,controller.Param["T_C0"]-1)==0 or k==0:
             #send the control law
-            controller.u_out[:, k] = controller.u_control
+            # controller.u_out[:, k] = controller.u_control
 
             # U: 
             # prime 4 le potenze in W e negative
@@ -267,7 +266,7 @@ if __name__ == "__main__":
         help="Run the script in debug mode with simulated data",
     )
     
-    # Opts['Debug'] = parser.parse_args().Debug
+    Opts['Debug'] = parser.parse_args().Debug
     args = parser.parse_args()
     Param["Model"] = args.Model
 
@@ -303,7 +302,7 @@ if __name__ == "__main__":
         scheduler = BackgroundScheduler()
 
         scheduler.add_job(ReadStatus, 'interval', seconds= 10, next_run_time=datetime.now() + timedelta(seconds=2))
-        scheduler.add_job(MPC_solve, 'interval', seconds=10, next_run_time=datetime.now() + timedelta(seconds=5))
+        scheduler.add_job(MPC_solve, 'interval', seconds= controller.time_step, next_run_time=datetime.now() + timedelta(seconds=5))
         scheduler.start()
 
     try:
