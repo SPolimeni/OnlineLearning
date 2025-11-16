@@ -75,7 +75,7 @@ class MPC:
         self.y_prec=y_pred
         u_pred=np.zeros([self.n_inp,self.N])
         u_pred[0:4,:]=-32000
-        u_pred[4:6,:]=72
+        u_pred[4:6,:]=70.5
         self.u_prec=u_pred
         ### Buffer Gaussian Process ###
         self.gp_buffer = {
@@ -631,7 +631,7 @@ class MPC:
         ### Cost Function  ### 
                 
             gamma = 0.2
-            T_ref = 75
+            T_ref = 70.5
             c_gas=0.034 # $/kWh
             COP = 0.8
             gamma_pred_gas =c_gas*casadi.DM.ones(1,self.N)
