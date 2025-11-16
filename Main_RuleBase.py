@@ -80,8 +80,8 @@ def SetPointsToDERTF(Solved=True):
         controller.SetPointsWriter.DataMap['Power_HL2']['Value'] = -1e-3 * GetValue(controller.u_out[1, k]) # W to kW
         controller.SetPointsWriter.DataMap['Power_HL3']['Value'] = -1e-3 * GetValue(controller.u_out[2, k]) # W to kW
         controller.SetPointsWriter.DataMap['Power_HL4']['Value'] = -1e-3 * GetValue(controller.u_out[3, k]) # W to kW
-        controller.SetPointsWriter.DataMap['T_out_GB']['Value']  = GetValue(controller.u_out[4, k])
-        controller.SetPointsWriter.DataMap['T_out_EB']['Value']  = GetValue(controller.u_out[5, k])
+        controller.SetPointsWriter.DataMap['T_out_GB']['Value']  = 70#GetValue(controller.u_out[4, k])
+        controller.SetPointsWriter.DataMap['T_out_EB']['Value']  = 70#GetValue(controller.u_out[5, k])
 
         if abs(controller.SetPointsWriter.DataMap['Power_HL1']['Value']) < 10:
             controller.SetPointsWriter.DataMap['Power_HL1']['Value'] = 32
@@ -92,9 +92,9 @@ def SetPointsToDERTF(Solved=True):
         if abs(controller.SetPointsWriter.DataMap['Power_HL4']['Value']) < 10:
             controller.SetPointsWriter.DataMap['Power_HL4']['Value'] = 32
         if controller.SetPointsWriter.DataMap['T_out_GB']['Value'] < 45:
-            controller.SetPointsWriter.DataMap['T_out_GB']['Value'] = 72
+            controller.SetPointsWriter.DataMap['T_out_GB']['Value'] = 70
         if controller.SetPointsWriter.DataMap['T_out_EB']['Value'] < 45:
-            controller.SetPointsWriter.DataMap['T_out_EB']['Value'] = 72
+            controller.SetPointsWriter.DataMap['T_out_EB']['Value'] = 70
 
     except Exception as e:
         tb = traceback.extract_tb(e.__traceback__)
@@ -232,15 +232,15 @@ if __name__ == "__main__":
         "Tr_max"    :66,
         "Tr_min"    :45,
         "Ts_max"    :80,
-        "Ts_max_eb" :72,
+        "Ts_max_eb" :75,
         "Ts_min"    :65,
         "m_max"     :10,
         "m_min"     :2,
         "Pb_max"    :147e3,
         "Pb_min"    :60e3,
-        "Pb_max_eb" :38e3,
-        "Pb_min_eb" :22e3,
-        "nnarx_mat" :os.path.join('NNARX_9-9_H3_bs20_Ts300_Ns300_20251020_154518','net.mat'),
+        "Pb_max_eb" :50e3,
+        "Pb_min_eb" :30e3,
+        "nnarx_mat" :os.path.join('NNARX_9-9_H3_bs20_Ts150_Ns150_20251107_082445','net.mat'),
         "c_el"      :np.genfromtxt('20250501_20250501_MGP_PrezziZonali_Nord.csv', delimiter=';', usecols=(2), skip_header=2),
         "Potenza"   :np.genfromtxt('DHN_ground_truth.csv', delimiter=',', usecols=(3,4,5,6), skip_header=28),#potenza all'istante k
         "P_Shift"   :4000, 
