@@ -639,8 +639,8 @@ class MPC:
             gamma_pred_el =self.c_el[r,0]/1000*casadi.DM.ones(1,self.N) #$/KWh
             print(self.c_el[r,0])
             alpha_slack = 0.01*casadi.MX.ones((1, self.n_slack)) 
-            self.opti.subject_to(self.J ==1*(gamma_pred_gas @(1/1000*self.Ts/3600 * self.Pb[0,:].T/COP)+
-            gamma_pred_el @ (1/1000*self.Ts/3600 * self.Pb[1,:].T/1)+ gamma*(self.y[0,self.N-1] -T_ref*casadi.MX.ones((1, 1)))**2+alpha_slack@self.s)+
+            self.opti.subject_to(self.J ==1*(gamma_pred_gas @(1/1000*self.Ts/3600 * self.Pb[0,:].T/0.95)+
+            gamma_pred_el @ (1/1000*self.Ts/3600 * self.Pb[1,:].T/0.8)+ gamma*(self.y[0,self.N-1] -T_ref*casadi.MX.ones((1, 1)))**2+alpha_slack@self.s)+
             casadi.sum1(self.T_slack)*1000)
         
     def mpc_controller(self, t,  T_C0, xk, uk, y_rnn):
