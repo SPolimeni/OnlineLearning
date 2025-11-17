@@ -111,16 +111,44 @@ def SetPointsToDERTF(Solved=True):
         node_data.append(controller.SetPointsWriter.DataMap[key])
 
     try:
-        controller.SetPointsWriter.write_node(node_data)
-    except Exception as e:
-        tb = traceback.extract_tb(e.__traceback__)
-        if tb:
-            last_trace = tb[-1]
-            msg = f"Error occurred while writing to OPC UA server: {e}\nFile: {last_trace.filename}\nLine: {last_trace.lineno}"
-        else:
-            msg = f"Error occurred while writing to OPC UA server: {e}"
-        log_exception(msg)
-        print(msg)
+        if controller.SetPointsWriter.client is None:
+            controller.SetPointsWriter.connect()
+        max_attempts = 5
+        for attempt in range(max_attempts):
+            try:
+                controller.SetPointsWriter.write_node(node_data)
+                break
+            except Exception as e:
+
+                if attempt == max_attempts - 1:
+                    tb = traceback.extract_tb(e.__traceback__)
+                    if tb:
+                        last_trace = tb[-1]
+                        msg = f"Error occurred while writing to OPC UA server: {e}\nFile: {last_trace.filename}\nLine: {last_trace.lineno}"
+                    else:
+                        msg = f"Error occurred while writing to OPC UA server: {e}"
+                    log_exception(msg)
+                    print(msg)
+
+                if attempt < max_attempts - 1:
+                    try:
+                        controller.SetPointsWriter.disconnect()
+                    except:
+                        pass
+                    controller.SetPointsWriter.connect()
+
+                else:
+                    time.sleep(1)
+
+    # except Exception as e:
+    #     tb = traceback.extract_tb(e.__traceback__)
+    #     if tb:
+    #         last_trace = tb[-1]
+    #         msg = f"Error occurred while writing to OPC UA server: {e}\nFile: {last_trace.filename}\nLine: {last_trace.lineno}"
+    #     else:
+    #         msg = f"Error occurred while writing to OPC UA server: {e}"
+    #     log_exception(msg)
+    #     print(msg)
 
 def MPC_solve():
 
