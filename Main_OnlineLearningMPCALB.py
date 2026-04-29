@@ -7,7 +7,7 @@ import copy
 from datetime import datetime, timedelta
 from apscheduler.schedulers.background  import BackgroundScheduler
 
-from class_MPC import MPC
+from class_MPC_OLD import MPC
 from utils.DERTF_StatesDefinition       import main_status_readings
 from utils.OPCUA.DERTF_SetPointsWriter  import OPCUA_SetPoint
 from utils.DataManagement               import SaveData

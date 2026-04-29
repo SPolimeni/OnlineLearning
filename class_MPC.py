@@ -16,7 +16,7 @@ class MPC:
             self.mean_module = gpytorch.means.ConstantMean()
             self.covar_module = gpytorch.kernels.ScaleKernel(
                 gpytorch.kernels.RBFKernel(
-                    length_scale=1.0,
+                    lengthscale=1.0,
                     length_scale_bounds=(1e-3, 1e3),
                     ard_num_dims=27
                 )
@@ -40,10 +40,32 @@ class MPC:
         self.N=Param["N"]
         self.n_out=Param["n_out"]
         self.n_inp=Param["n_inp"]
-        self.u_opt=int(self.N/self.Nb)
+        self.n_uopt=int(self.N/self.Nb)
         self.n_slack=1
         
         ### import from Param
+        self.beta0_1 = Param["beta0_1"] # MODIFIED
+        self.beta0_2 = Param["beta0_2"] # MODIFIED
+        self.beta0_3 = Param["beta0_3"] # MODIFIED
+
+        self.epsilon0 = Param["epsilon0"] # MODIFIED
+        self.L_prev0  = Param["L_prev0"] # MODIFIED
+        self.sigma_epsilon0_2 = Param["sigma_epsilon0_2"] # MODIFIED
+
+        self.gamma=Param["gamma"] #MODIFIED
+        self.T_ref=Param["T_ref"]  #MODIFIED
+        self.c_gas=Param["c_gas"]  #MODIFIED
+        self.COP=Param["COP"]  #MODIFIED
+        self.eff_EB=Param["eff_EB"]  #MODIFIED
+        self.gamma_exp0=Param["gamma_exp0"]  #MODIFIED
+        self.gamma_slack0=Param["gamma_slack0"]  #MODIFIED
+        self.alpha_slack0=Param["alpha_slack0"]  #MODIFIED
+
+        self.P_Shift_mpc1=Param["P_Shift_mpc1"]  #MODIFIED
+        self.P_Shift_mpc2=Param["P_Shift_mpc2"]  #MODIFIED
+        self.P_Shift_mpc3=Param["P_Shift_mpc3"]  #MODIFIED
+        self.P_Shift_mpc4=Param["P_Shift_mpc4"]  #MODIFIED
+
         self.Ts=Param["Ts"]
         self.q_eb=Param["q_eb"]
         self.Tr_max=Param["Tr_max"]
@@ -51,6 +73,7 @@ class MPC:
         self.Ts_max=Param["Ts_max"]
         self.Ts_max_eb=Param["Ts_max_eb"]
         self.Ts_min=Param["Ts_min"]
+        self.Ts_min_supply=Param["Ts_min_supply"]
         self.m_max=Param["m_max"]
         self.m_min=Param["m_min"]
         self.Pb_max=Param["Pb_max"]
@@ -77,6 +100,7 @@ class MPC:
         u_pred[0:4,:]=-32000
         u_pred[4:6,:]=70.5
         self.u_prec=u_pred
+        self.sigma_prec = 0.05 * np.ones((self.N, self.n_out))
         ### Buffer Gaussian Process ###
         self.gp_buffer = {
         "y_buffer_1": [],
@@ -89,22 +113,33 @@ class MPC:
         self.y_gp= np.empty((self.num_steps + self.N, self.n_out), dtype=object)
 
         ### bayesian last layer ###
+
         layers= self.data['layers'][0, 0]  
         weight=layers['weights']
         weights=weight[0,0]
         U0 = weights['U0'][0][0]
         b0 = weights['b0'][0][0]
+
+        ### NNARX Hyperparameters Extraction
+        output_scaler=self.data['output_scaler']
+        output_scaler=output_scaler[0,0]
+        self.out_bias=output_scaler['bias'][0]
+        self.out_scale=output_scaler['scale'][0]
+
         self.theta=np.vstack([U0,b0])
-        self.L_prev=np.eye(10) #10x10 matrice identità inziale
-        self.Q_prev=self.L_prev@self.theta
+        self.L_prev=self.L_prev0*np.eye(10) #TUNING 
+        self.Q_prev=np.linalg.inv(self.L_prev)@self.theta #MODIFIED
         
+        self.beta = np.array([self.beta0_1/self.out_scale[0], self.beta0_2/self.out_scale[1], self.beta0_3/self.out_scale[2]]) #MODIFIED TUNING
         
+        self.epsilon= self.epsilon0/self.beta[0]*self.beta #MODIFIED - TUNING
+        self.sigma_epsilon2 = self.sigma_epsilon0_2 #MODIFIED - TUNING
 
         ### MPC optimization Variables ###
         self.opti = casadi.Opti()
-        self.u = self.opti.variable(self.n_inp, self.u_opt)
+        self.u = self.opti.variable(self.n_inp, self.n_uopt)
         self.y = self.opti.variable(self.n_out, self.N)
-       # self.y_nnarx = self.opti.variable(self.n_out, self.N)
+        # self.y_nnarx = self.opti.variable(self.n_out, self.N)
     
         self.s = self.opti.variable(self.n_slack, 1)
         self.J  = self.opti.variable(1, 1)
@@ -556,32 +591,36 @@ class MPC:
     def SetOptimizationVariables(self):
          ### MPC optimization Variables ###
         self.opti = casadi.Opti()
-        self.u = self.opti.variable(self.n_inp, self.u_opt)
+        self.u = self.opti.variable(self.n_inp, self.n_uopt)
         self.y = self.opti.variable(self.n_out, self.N)
         self.y_nnarx = self.opti.variable(self.n_out, self.N)
-        self.T_slack = self.opti.variable(1, self.N)
-    
-        self.s = self.opti.variable(self.n_slack, 1)
+        if self.Model == "BNNExp":
+            self.s = self.opti.variable(self.n_out, self.N)
+        else:
+            self.T_slack = self.opti.variable(1, self.N)
+
         self.J  = self.opti.variable(1, 1)
         self.Pb  = self.opti.variable(2, self.N)
+        if self.Model == "BNNExp":
+            self.slack_explo = self.opti.variable(self.n_out, self.N) #MODIFIED
+            self.sigmaK = self.opti.variable(self.N, self.n_out)
+
+
     def SetConstraints(self):
          ### Constraints ###
-        self.opti.subject_to(self.Ts_min- self.s[0,:] <= self.y[0,:])
-        self.opti.subject_to(self.Ts_max + self.s[0,:] >= self.y[0,:]) 
-        self.opti.subject_to(self.Tr_min <= self.y[1,:])
-        self.opti.subject_to(self.Tr_max  >= self.y[1,:])   
+          
         self.opti.subject_to(self.Ts_min <= self.u[5,:])
         self.opti.subject_to(self.Ts_max_eb>= self.u[5,:])
         self.opti.subject_to(self.Ts_min<= self.u[4,:])
         self.opti.subject_to(self.Ts_max >= self.u[4,:])
-        self.opti.subject_to(self.Potenze[:,self.t]== self.u[0:4, 0])
-        self.opti.subject_to(self.Potenze[:,self.t+3]+1000== self.u[0:4, 1])
-        self.opti.subject_to(self.Potenze[:,self.t+6]+1000== self.u[0:4, 2])
-        self.opti.subject_to(self.Potenze[:,self.t+9]+1000== self.u[0:4, 3])
-        self.opti.subject_to(self.m_min<= self.y[2,:])
-        self.opti.subject_to(self.m_max >= self.y[2,:])   
-        y_N,output_rnn= self.model_rnn(self.t,self.data, self.u, self.y_prec,self.u_prec,self.xk,self.uk,self.y,self.N/self.Nb,self.y_rnn,self.theta)
-        # System dynamics constraint
+        self.opti.subject_to(self.Potenze[:,self.t] + self.P_Shift_mpc1== self.u[0:4, 0])
+        self.opti.subject_to(self.Potenze[:,self.t+3]+ self.P_Shift_mpc2== self.u[0:4, 1])
+        self.opti.subject_to(self.Potenze[:,self.t+6]+ self.P_Shift_mpc3== self.u[0:4, 2])
+        self.opti.subject_to(self.Potenze[:,self.t+9]+ self.P_Shift_mpc4== self.u[0:4, 3])
+        
+        # System dynamics constraint 
+        y_N,output_rnn,sigma_est= self.model_rnn(self.t,self.data, self.u, self.y_prec,self.u_prec,self.xk,self.uk,self.y,self.N/self.Nb,self.y_rnn,self.theta)
+        
         if self.Model=='GP':
             self.opti.subject_to(self.y == y_N[:,0:self.N])
             self.opti.subject_to(self.y_nnarx == output_rnn[:,0:self.N])
@@ -589,25 +628,58 @@ class MPC:
             self.opti.subject_to(self.y == output_rnn[:,0:self.N])
             self.opti.subject_to(self.y_nnarx== output_rnn[:,0:self.N])
 
-        # Vincolo per temperatura minima mandata ultimo carico
-        self.opti.subject_to(self.y[0,:] >= 70 - self.T_slack)
-        self.opti.subject_to(self.T_slack >= 0)
-        self.opti.subject_to(self.T_slack <= 5)
 
-        self.opti.subject_to(self.s[:,0] >= 0)
-        delta = 5
+        if self.Model== 'BNNExp': 
+            self.opti.subject_to((self.Ts_min_supply - self.out_bias[0])/self.out_scale[0] + self.beta[0]*(self.sigmaK[:,0]).T - self.s[0,:] <= (self.y[0,:] - self.out_bias[0])/self.out_scale[0])
+            self.opti.subject_to((self.Ts_max - self.out_bias[0])/self.out_scale[0] - self.beta[0]*(self.sigmaK[:,0]).T + self.s[0,:] >= (self.y[0,:] - self.out_bias[0])/self.out_scale[0]) 
+      
+            # Tr_min <= Tr <= Tr_max
+            self.opti.subject_to((self.Tr_min - self.out_bias[1])/self.out_scale[1] + self.beta[1]*(self.sigmaK[:,1]).T - self.s[1,:] <= (self.y[1,:] - self.out_bias[1])/self.out_scale[1])
+            self.opti.subject_to((self.Tr_max - self.out_bias[1])/self.out_scale[1] - self.beta[1]*(self.sigmaK[:,1]).T + self.s[1,:] >= (self.y[1,:] - self.out_bias[1])/self.out_scale[1]) 
+
+            # q_min <= q <= q_max
+            self.opti.subject_to((self.m_min - self.out_bias[2])/self.out_scale[2] + self.beta[2]*(self.sigmaK[:,2]).T - self.s[2,:] <= (self.y[2,:] - self.out_bias[2])/self.out_scale[2])
+            self.opti.subject_to((self.m_max - self.out_bias[2])/self.out_scale[2] - self.beta[2]*(self.sigmaK[:,2]).T + self.s[2,:] >= (self.y[2,:] - self.out_bias[2])/self.out_scale[2]) 
+
+            self.opti.subject_to(self.sigmaK==sigma_est)  
+
+            for i in range(0,self.n_out):
+                self.opti.subject_to(self.s[i,:] >= 1e-8)
+                self.opti.subject_to(self.s[i,:] <= 50) 
+                self.opti.subject_to(self.slack_explo[i,:] >= 1e-6)
+                self.opti.subject_to(self.slack_explo[i,:] <= 1e1) 
+
+            if self.flag == 1: 
+                ### Exploration Constraints ###
+                self.opti.subject_to(self.beta[0]*(self.sigmaK[:,0]).T>=self.epsilon[0]-self.slack_explo[0,:]/self.out_scale[0])  
+                self.opti.subject_to(self.beta[1]*(self.sigmaK[:,1]).T>=self.epsilon[1]-self.slack_explo[1,:]/self.out_scale[1])    
+                self.opti.subject_to(self.beta[2]*(self.sigmaK[:,2]).T>=self.epsilon[2]-self.slack_explo[2,:]/self.out_scale[2])    
+        else: 
+            #self.opti.subject_to(self.Ts_min- self.s[0,:] <= self.y[0,:])#MODIFIED
+            self.opti.subject_to(self.Ts_max + self.T_slack >= self.y[0,:]) 
+            self.opti.subject_to(self.Tr_min <= self.y[1,:])
+            self.opti.subject_to(self.Tr_max  >= self.y[1,:]) 
+            self.opti.subject_to(self.m_min<= self.y[2,:])
+            self.opti.subject_to(self.m_max >= self.y[2,:]) 
+            # Vincolo per temperatura minima mandata ultimo carico
+            self.opti.subject_to(self.y[0,:] >= self.Ts_min_supply - self.T_slack) #MODIFIED
+            self.opti.subject_to(self.T_slack >= 0)
+            self.opti.subject_to(self.T_slack <= 20)
+
+        if self.Model == 'BNNExp':
+            for i in range(self.n_out):
+                self.opti.subject_to(self.s[i,:] >= 1e-8)
+
+        # #Δu_min < Δu < Δu_max
+        delta = 5 #TUNING
         val_prec = float(self.u_prec[5, 0])                       
-        val_correnti = self.u[5, 0:self.u_opt-1]                          
-
+        val_correnti = self.u[5, 0:self.n_uopt-1]                          
         vect = casadi.horzcat(val_prec, val_correnti)
         self.opti.subject_to(-delta <= self.u[5,:] - vect)
         self.opti.subject_to( delta >= self.u[5,:] - vect)
         
-        # # #Δu_min < Δu < Δu_max
-        delta = 5
         val_prec = float(self.u_prec[4, 0])                       
-        val_correnti = self.u[4, 0:self.u_opt-1]                          
-
+        val_correnti = self.u[4, 0:self.n_uopt-1]                          
         vect = casadi.horzcat(val_prec, val_correnti)
         self.opti.subject_to(-delta <= self.u[4,:] - vect)
         self.opti.subject_to( delta >= self.u[4,:] - vect)
@@ -630,20 +702,40 @@ class MPC:
     def SetCostFunction(self):
         ### Cost Function  ### 
                 
-            gamma = 0.2
-            T_ref = 70.5
-            c_gas=0.034 # $/kWh
-            COP = 0.8
+            gamma = self.gamma
+            T_ref = self.T_ref 
+            c_gas = self.c_gas
+            COP = self.COP
+            eff_EB = self.eff_EB
+            gamma_exp0 = self.gamma_exp0
+            gamma_slack0 = self.gamma_slack0
+            alpha_slack0 = self.alpha_slack0
             gamma_pred_gas =c_gas*casadi.DM.ones(1,self.N)
             r=int(np.floor(self.t/3)) 
-            gamma_pred_el =self.c_el[r,0]/1000*casadi.DM.ones(1,self.N) #$/KWh
-            print(self.c_el[r,0])
-            alpha_slack = 0.01*casadi.MX.ones((1, self.n_slack)) 
-            self.opti.subject_to(self.J ==1*(gamma_pred_gas @(1/1000*self.Ts/3600 * self.Pb[0,:].T/0.95)+
-            gamma_pred_el @ (1/1000*self.Ts/3600 * self.Pb[1,:].T/0.8)+ gamma*(self.y[0,self.N-1] -T_ref*casadi.MX.ones((1, 1)))**2+alpha_slack@self.s)+
-            casadi.sum1(self.T_slack)*1000)
+            #gamma_pred_el =self.c_el[r,0]/1000*casadi.DM.ones(1,self.N) #$/KWh
+
+            gamma_pred_el = np.zeros((self.N,1))    #MODIFIED
+            for i in range(self.N):
+                idx = int(np.floor((self.t+i) * len(self.c_el) / self.num_steps))
+                idx = min(idx, len(self.c_el)-1)
+                gamma_pred_el[i] = self.c_el[idx]/1000 #c_el[idx] ALB come si vede dai file plot e dai codici test, i prezzi devono essere /1000, così ottimizzazione sembra più sensata
+            gamma_pred_el = gamma_pred_el.T
+
+            alpha_slack = alpha_slack0*casadi.MX.ones((1, self.n_slack))  #TUNING PARAMETER
+            
+            gamma_exp=gamma_exp0*np.ones((1, self.n_out)) #TUNING PARAMETER
+            
+            #gamma_slack=1000 #TUNING PARAMETER
+            gamma_slack = gamma_slack0*np.array([self.out_scale[0], self.out_scale[1], self.out_scale[2]]) #MODIFIED
+
+            if self.Model=="BNNExp":
+                # self.opti.subject_to(self.J ==1*(gamma_pred_gas @(1/1000*self.Ts/3600 * self.Pb[0,:].T/COP)+
+                # gamma_pred_el @ (1/1000*self.Ts/3600 * self.Pb[1,:].T/1)+ gamma*(self.y[0,self.N-1] -T_ref*casadi.MX.ones((1, 1)))**2+ gamma_slack*casadi.sum1(casadi.sum2(self.s))) + gamma_exp@self.slack_explo*self.flag )
+                self.opti.subject_to(self.J ==gamma_pred_gas @(1/1000*self.Ts/3600 * self.Pb[0,:].T/COP)+gamma_pred_el @ (1/1000*self.Ts/3600 * self.Pb[1,:].T/eff_EB)+ gamma*(self.y[0,self.N-1] -T_ref*casadi.MX.ones((1, 1)))**2+ gamma_slack[0]*casadi.sum1(self.s[0,:]) + gamma_slack[1]*casadi.sum1(self.s[1,:]) + gamma_slack[2]*casadi.sum1(self.s[2,:]) + gamma_exp@self.slack_explo@np.ones((self.N, 1))*self.flag )
+            else:
+                self.opti.subject_to(self.J ==gamma_pred_gas @(1/1000*self.Ts/3600 * self.Pb[0,:].T/COP)+gamma_pred_el @ (1/1000*self.Ts/3600 * self.Pb[1,:].T/eff_EB)+ gamma*(self.y[0,self.N-1] -T_ref*casadi.MX.ones((1, 1)))**2+casadi.sum1(self.T_slack)*alpha_slack)
         
-    def mpc_controller(self, t,  T_C0, xk, uk, y_rnn):
+    def mpc_controller(self, t,  T_C0, xk, uk, y_rnn,flag):
         start_time = time.time()
         data = self.data
         Potenze = self.Potenze
@@ -658,15 +750,16 @@ class MPC:
         n_slack = self.n_slack
         n_inp = self.n_inp
         n_out = self.n_out
-        u_opt = int(self.N / self.Nb)
+        n_uopt = int(self.N / self.Nb)
         self.xk=xk
         self.uk=uk
         self.t=t
         self.y_rnn=y_rnn
+        self.flag= flag
         self.SetOptimizationVariables()
         
             
-        if t<T_C0-1:
+        if t<T_C0:
             u_opt = self.u_prec[:,0]
             u_pred = self.u_prec
             y_pred = self.y_prec
@@ -674,26 +767,36 @@ class MPC:
             Pb_pred=self.Pb_prec
             slack= np.zeros([n_slack, 1])
             J_pred = self.J_prec
-            t_solver = 0
+            computation_time = 0
+            sigma_pred = 0.05 * np.ones((self.N, self.n_out))
+            slack_explo= np.zeros([n_out, N])
 
 
         else:
             self.SetConstraints()
 
             self.SetCostFunction()
+
             for i in range(n_inp) :
-                initial_guess = np.concatenate([self.u_prec[i, 1:u_opt], [self.u_prec[i, -1]]])
+                initial_guess = np.concatenate([self.u_prec[i, 1:n_uopt], [self.u_prec[i, -1]]])
                 self.opti.set_initial(self.u[i,:], initial_guess)
 
             for i in range(n_out):
                 y_initial = np.concatenate([ self.y_prec[i, 1:N],[self.y_prec[i, -1]]])
                 self.opti.set_initial(self.y[i,:],  y_initial)
                 self.opti.set_initial(self.y_nnarx[i,:],  y_initial)
-            self.opti.set_initial(self.s, np.zeros([n_slack,1]))  
             for i in range(2):
                 Pb_initial = np.concatenate([self.Pb_prec[ i,1:], [self.Pb_prec[ i,-1]]])
                 self.opti.set_initial(self.Pb[i,:], Pb_initial)    
             self.opti.set_initial(self.J, self.J_prec)
+            if self.Model == "BNNExp":
+                for i in range(self.n_out):
+                    self.opti.set_initial(self.sigmaK[:,i], 0.05*np.ones([self.N,1]))
+                self.opti.set_initial(self.slack_explo, np.zeros([self.n_out,self.N]))  #MODIFY - TUNING PARAMETER
+                self.opti.set_initial(self.s, np.zeros([self.n_out, self.N]))
+            else:
+                self.opti.set_initial(self.s, np.zeros([n_slack,1]))  
+
 
             self.opti.minimize(self.J);                  
             prob_opts = {
@@ -704,7 +807,7 @@ class MPC:
                 'print_time': False       # Do not print the timestamp
             }
 
-            # IPOPT settings
+            # IPOPT settings  #MODIFY - TUNING PARAMETER
             ip_opts = {
                 'print_level': 3,           # Disable printing
                 'max_iter': int(1e4),       # Maximum iterations. Use int() to avoid float
@@ -724,34 +827,43 @@ class MPC:
                 u_pred = sol.value(self.u)
             
                 y_pred = sol.value(self.y)
-                slack = sol.value(self.s)
+                if self.Model == 'BNNExp':
+                    slack = sol.value(self.s)
+                    slack_explo = sol.value(self.slack_explo)
+                    sigma_pred = sol.value(self.sigmaK)
+                else:
+                    slack = np.zeros([n_slack, 1])
+                    slack_explo = 0
+                    sigma_pred = self.sigma_prec
                 Pb_pred=sol.value(self.Pb)
                 J_pred = sol.value(self.J)
                 y_nnarx=sol.value(self.y_nnarx)
-
             except Exception as ex:
                 print('*** Problem not solved  -  Takes last Feasible Solution!***')
 
                 u_opt =self.u_prec[:,0]
                 # Other variables
                 u_pred = self.u_prec
-            
+
                 y_pred = self.y_prec
                 slack = np.zeros([n_slack,1])
+                slack_explo = np.zeros([self.n_out, self.N]) if self.Model == 'BNNExp' else 0
                 Pb_pred=self.Pb_prec
                 J_pred = self.J_prec
                 y_nnarx=self.y_prec
+                sigma_pred = self.sigma_prec
         
         ### save prev values ###      
         self.J_prec=J_pred
         self.Pb_prec=Pb_pred
         self.y_prec=y_pred
         self.u_prec=u_pred
+        self.sigma_prec=sigma_pred
 
         end_time=time.time()
         computation_time=end_time-start_time
 
-        return  u_opt,slack,y_nnarx,computation_time
+        return  u_opt,slack,y_nnarx,computation_time,sigma_pred, slack_explo
 
     def simulate_dynamics(self, k, initial_state, input_vector, A, Bu, Bx, C, steps, weights, n_states, ground_truth,theta):
         n_out = self.n_out
@@ -759,6 +871,7 @@ class MPC:
         outputs = casadi.MX.zeros((n_out, self.N))
         states[:] = initial_state.reshape(24)
         eta = ground_truth[k, :].T
+        sigma_k = casadi.MX.zeros((self.N,self.n_out))
 
         for k_sim in range(0, self.N):
 
@@ -767,10 +880,10 @@ class MPC:
             s3 = casadi.reshape(np.matmul(Bx, eta), (24, 1))
             states[:] = s1 + s2 + s3
 
-            eta = self.activation_fun(input_vector[k_sim, :], weights, states[:],theta)
+            eta,sigma = self.activation_fun(input_vector[k_sim, :], weights, states[:],theta)
             outputs[:, k_sim] = eta
-
-        return states, outputs
+            sigma_k[k_sim,:]=sigma
+        return states, outputs,sigma_k
 
     def model_rnn(self,k,data,u,y_pred,u_prec,xk,uk,y,n_uopt,y_rnn,theta): 
 
@@ -818,9 +931,9 @@ class MPC:
                 U[i,j]=(u[i,ii]-inp_bias[i]*casadi.MX.ones((1)))/inp_scale[i]
                 if i==n_inp-1:
                     if j==0:
-                        U[i,j]= (((u[5,j]*q_eb+( xk[2,k] -q_eb*casadi.DM.ones(1))*u[4,j])/xk[2,k]) -inp_bias[i])/inp_scale[i]
+                        U[i,j]= (((u[5,j]*q_eb+( xk[2,k] -q_eb*casadi.DM.ones(1))*u[4,j])/casadi.fmax(xk[2,k], 1e-6)) -inp_bias[i])/inp_scale[i]
                     else:
-                        U[i,j]= (((u[5,ii]*q_eb+( y[2,j-1] -q_eb*casadi.DM.ones(1))*u[4,ii])/y[2,j-1]) -inp_bias[i])/inp_scale[i]
+                        U[i,j]= (((u[5,ii]*q_eb+( y[2,j-1] -q_eb*casadi.DM.ones(1))*u[4,ii])/casadi.fmax(y[2,j-1], 1e-6)) -inp_bias[i])/inp_scale[i]
         U=U.T
         for i in range(n_inp):
             for j in range(k):
@@ -867,7 +980,7 @@ class MPC:
                 ground_truth[j,i]=(xk[i,j]-out_bias[i])/out_scale[i]
     
         ### NNARX Prediction ###
-        states,outputs=self.simulate_dynamics(k,initial_state, U[:,:], A, Bu, Bx, C, N,weights,n_states,ground_truth,theta)
+        states,outputs,Sigma=self.simulate_dynamics(k,initial_state, U[:,:], A, Bu, Bx, C, N,weights,n_states,ground_truth,theta)
 
         if self.Model=='NNARX' or self.Model=='BNN':
             ### Denormalization Prediction ###
@@ -894,7 +1007,7 @@ class MPC:
                         Y_RNN[i,j]=out_scale[i] * outputs[i,j]+out_bias[i]*np.ones([1, 1]) # * per prodotto scalare
 
                 
-        return Y_pred,Y_RNN
+        return Y_pred,Y_RNN, Sigma
 
     def activation_fun(self,input_vector, weights,state_vector,theta):
         #3 layers totoali
@@ -934,14 +1047,17 @@ class MPC:
         #theta=casadi.vertcat(U0,b0)
         f_tilde=casadi.vertcat(e_vect,1)
         eta=theta.T@f_tilde
+        sigma=np.sqrt((1+f_tilde.T@self.L_prev@f_tilde) * self.sigma_epsilon2)
 
         # e=np.matmul(U0.transpose(),e_vect)
 
         # eta = e + np.transpose(b0.reshape(3,))
         
-        return eta
+        return eta,sigma
 
     def bayesian_correction(self,s,y_star,u):
+        #sigma_epsilon2 = 0.005 #0.01  #MODIFIED - USO SELF.SIGMA_EPSILON2
+
         L_prec=self.L_prev
         Q_prec=self.Q_prev
     ####  bayesian correction ###
@@ -970,7 +1086,8 @@ class MPC:
         xk=np.zeros([s+1,3])
         u_norm=np.zeros([5,s])
         print(s)
-        q_eb=3/3.6
+        #q_eb=3/3.6 #MODIFIED
+        q_eb = self.q_eb
         n_out=3
         #print(y_star[:,s])
         for i in range(n_out): 
@@ -996,7 +1113,7 @@ class MPC:
         state[5,:] = (u_norm[2,k-2])
         state[6,:] =(u_norm[3,k-2])
         state[7,:] =u_norm[4,k-2]
-        state[8,:] ==xk[k-1,0]
+        state[8,:] = xk[k-1,0]
         state[9,:] = xk[k-1,1]
         state[10,:] = xk[k-1,2]
         state[11,:] =(u_norm[0,k-1])
@@ -1061,8 +1178,9 @@ class MPC:
         self.Q_prev=Q
         self.L_prev=Lambda_inv
         self.theta=theta_mean
+        self.sigma_bnn=np.sqrt((1+f_tilde.T@L_prec@f_tilde)*self.sigma_epsilon2)
 
-        #return theta_mean
+        return theta_mean #MODIFIED
 ### to add in main mpc
 ## nel caso dell bnn va chiamata prima la bayesian neural network e passata theta quella nuova calcolata
 ### nel caso in cui non si usano le bayesain neural network theta deve essere associata a zero pi dentro la funziona verrà ridefinita

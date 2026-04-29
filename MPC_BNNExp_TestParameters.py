@@ -14,7 +14,7 @@ def ensure2D(x: np.ndarray):
     return x
 
 ############## Define parameters ##############
-data = loadmat('net_1020.mat') #ALB loadmat('net2.mat')
+data = loadmat('NNmodels/net_1020.mat') #ALB loadmat('net2.mat')
 Potenze = ensure2D(np.genfromtxt('DHN_ground_truth.csv', delimiter=',', usecols=(3,4,5,6), skip_header=28)) +4000 
 Potenze=np.transpose(Potenze)
 c_el=ensure2D(np.genfromtxt('20250501_20250501_MGP_PrezziZonali_Nord.csv', delimiter=';', usecols=(2), skip_header=2))     
@@ -564,7 +564,7 @@ if __name__ == "__main__":
     Pb_prec[1,:]=cp * q_eb*np.ones([1,N])* (u_prec[5,:]-y_prec[1, :])
     J_prec=0
 
-    model=load_fmu('DHN_MC_V3_FMU_EB_60.fmu')
+    model=load_fmu('FMUs/DHN_MC_V3_FMU_EB_60.fmu')
     opts = model.simulate_options()
     opts['CVode_options']['rtol'] = 1e-4
     opts['CVode_options']['atol'] = 1e-4

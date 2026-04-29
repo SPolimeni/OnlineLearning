@@ -1,0 +1,29 @@
+Step 1 — Crea l'environment locale con Python 3.10
+
+conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main
+conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
+conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/msys2
+
+conda create --prefix ./env python=3.10 -y
+Step 2 — Attiva l'environment
+
+
+conda activate ./env
+Step 3 — Installa pyfmi e le sue dipendenze da conda-forge
+
+
+conda install -c conda-forge pyfmi -y
+pyfmi richiede assimulo e sundials — conda-forge li installa automaticamente tutti.
+
+Step 4 — Installa le altre dipendenze dal requirements.txt
+
+
+pip install -r requirements.txt
+
+Step 5 — Seleziona l'interprete in VSCode
+
+Dopo aver creato l'env, in VSCode:
+
+Ctrl+Shift+P → "Python: Select Interpreter"
+Seleziona ./env/python.exe
+Inizia dallo Step 1 e dimmi se hai errori. pyfmi a volte ha problemi di dipendenze su Windows — lo risolviamo insieme.
