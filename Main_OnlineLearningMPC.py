@@ -27,7 +27,7 @@ def AuxiliaryParameters(Params):
     controller.y_rnn_out            = np.zeros([controller.num_steps,Params["n_out"]])
     controller.y_pred_out           = np.zeros([Params["n_out"],controller.num_steps])
     controller.Pb_pred_out          = np.zeros([2,controller.num_steps])
-    controller.s_out                = np.zeros([Params["n_slack"],controller.num_steps])
+    controller.s_out                = np.zeros([Params["n_out"],controller.num_steps]) if controller.Param["Model"] == 'BNNExp' else np.zeros([Params["n_slack"],controller.num_steps])
     controller.final_cost           = np.zeros([controller.num_steps])
     controller.computation_time     = np.zeros([controller.num_steps])
     controller.time_points          = np.arange(0, controller.total_time + 1, controller.time_step)[:controller.num_steps]
@@ -46,7 +46,7 @@ def ReadStatus():
         TreturnMeas   = [60.12344, 60.224037, 60.187595, 60.183292]
         FlowMeas      = [2.7702346, 2.7731984, 2.7713318, 2.7692516]
         
-        if controller.t_step <= controller.Param["T_C0"]:
+        if controller.t_step < controller.Param["T_C0"]:
             idx = min(controller.t_step, len(TdeliveryMeas) - 1)
             y_dict = {
                 'T_delivery': TdeliveryMeas[idx],
@@ -218,7 +218,7 @@ def MPC_solve():
 
         else:
             flag = 0
-            #print(" exploration OFF")
+            print(" exploration OFF")
             controller.u_control, controller.slack, controller.y_nnarx, controller.computation_time[k],controller.sigma_current, controller.slack_explo= controller.mpc_controller(
             k, controller.Param["T_C0"], controller.y_out, controller.u_out, controller.y_rnn_out,flag)
         
@@ -250,7 +250,7 @@ def MPC_solve():
     if k < controller.Param["T_C0"]-1:
         controller.s_out[:, k] = controller.slack[:, 0]
     else:
-        controller.s_out[:, k] = controller.slack
+        controller.s_out[:, k] = controller.slack[:, 0] if controller.Param["Model"] == 'BNNExp' else controller.slack
 
     controller.y_rnn_out[k + 1, :]  = controller.y_nnarx[:, 0]
     controller.y_pred_out[:, k + 1] = controller.y_prec[:, 0]
@@ -313,6 +313,10 @@ if __name__ == "__main__":
         "Ts_max_eb"         :72,
         "Ts_min_supply"     :67,    #HARD CODED 
         "Ts_min"            :65,    #MINIMUN GENERATORS
+        "Ts_max_eb"         :72,     #TEST PAR ALB2 preso dai file test Simone
+        "Ts_min_eb"         :65,     #TEST PAR
+        "Ts_max_gb"         :80,     #TEST PAR
+        "Ts_min_gb"         :65,     #TEST PAR
         "m_max"             :10,
         "m_min"             :2,
         "Pb_max"            :147e3,
@@ -379,6 +383,10 @@ if __name__ == "__main__":
     controller.y_dict       = None
     controller.aux          = AuxiliaryParameters(Param)
     controller.InitialDate  = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    if Param['Model'] == 'BNNExp':
+        controller.y_rnn_out[0, :]  = controller.y_prec[:, 0]
+        controller.y_pred_out[:, 0] = controller.y_prec[:, 0]
     
     if not Opts['Debug']:
         SetPointsWriter         = OPCUA_SetPoint()
@@ -398,6 +406,13 @@ if __name__ == "__main__":
         fmu_opts['CVode_options']['rtol'] = 1e-4
         fmu_opts['CVode_options']['atol'] = 1e-4
         controller.fmu_opts = fmu_opts
+
+        # Initialize FMU state history to match MPC_BNNExp_TestParameters
+        init_steps = min(5, controller.num_steps, controller.N)
+        controller.y_out[:, :init_steps] = controller.y_prec[:, :init_steps]
+        controller.u_out[:, :init_steps] = controller.u_prec[:, :init_steps]
+        controller.y_pred_out[:, 0] = controller.y_prec[:, 0]
+        controller.y_rnn_out[0, :] = controller.y_prec[:, 0]
 
     if Opts['Debug']:
         for k in range(0, controller.num_steps - 1):

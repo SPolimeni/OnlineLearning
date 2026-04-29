@@ -74,6 +74,10 @@ class MPC:
         self.Ts_max_eb=Param["Ts_max_eb"]
         self.Ts_min=Param["Ts_min"]
         self.Ts_min_supply=Param["Ts_min_supply"]
+        self.Ts_max_gb=Param["Ts_max_gb"]
+        self.Ts_min_gb=Param["Ts_min_gb"]
+        self.Ts_max_eb=Param["Ts_max_eb"]
+        self.Ts_min_eb=Param["Ts_min_eb"]
         self.m_max=Param["m_max"]
         self.m_min=Param["m_min"]
         self.Pb_max=Param["Pb_max"]
@@ -87,19 +91,21 @@ class MPC:
         self.T_C0=Param["T_C0"] #istante in cui inizio ad applicare la legge di controllo
         ### initial value MPC
         self.J_prec=0
-        Pb_pred = np.zeros([2, self.N])
-        Pb_pred[0,:]=self.Pb_min
-        Pb_pred[1,:]=self.Pb_min_eb
-        self.Pb_prec=Pb_pred
         y_pred=np.zeros([self.n_out,self.N])
-        y_pred[0,:]=70
-        y_pred[1,:]=60
-        y_pred[2,:]=5
+        y_pred[0,:]=70.2690912858482
+        y_pred[1,:]=60.786245068179
+        y_pred[2,:]=2.5
         self.y_prec=y_pred
         u_pred=np.zeros([self.n_inp,self.N])
         u_pred[0:4,:]=-32000
-        u_pred[4:6,:]=70.5
+        u_pred[4,:]=70.5
+        u_pred[5,:]=70.0
         self.u_prec=u_pred
+        cp = 4186
+        Pb_pred = np.zeros([2, self.N])
+        Pb_pred[0,:] = cp * (self.y_prec[2,:] - self.q_eb) * (self.u_prec[4,:] - self.y_prec[1,:])
+        Pb_pred[1,:] = cp * self.q_eb * (self.u_prec[5,:] - self.y_prec[1,:])
+        self.Pb_prec = Pb_pred
         self.sigma_prec = 0.05 * np.ones((self.N, self.n_out))
         ### Buffer Gaussian Process ###
         self.gp_buffer = {
@@ -136,14 +142,14 @@ class MPC:
         self.sigma_epsilon2 = self.sigma_epsilon0_2 #MODIFIED - TUNING
 
         ### MPC optimization Variables ###
-        self.opti = casadi.Opti()
-        self.u = self.opti.variable(self.n_inp, self.n_uopt)
-        self.y = self.opti.variable(self.n_out, self.N)
-        # self.y_nnarx = self.opti.variable(self.n_out, self.N)
+        # self.opti = casadi.Opti()
+        # self.u = self.opti.variable(self.n_inp, self.n_uopt)
+        # self.y = self.opti.variable(self.n_out, self.N)
+        # # self.y_nnarx = self.opti.variable(self.n_out, self.N)
     
-        self.s = self.opti.variable(self.n_slack, 1)
-        self.J  = self.opti.variable(1, 1)
-        self.Pb  = self.opti.variable(2, self.N)
+        # self.s = self.opti.variable(self.n_slack, 1)
+        # self.J  = self.opti.variable(1, 1)
+        # self.Pb  = self.opti.variable(2, self.N)
     
     def ensure2D(self, x: np.ndarray):
         if x.ndim == 1:
@@ -594,29 +600,35 @@ class MPC:
         self.u = self.opti.variable(self.n_inp, self.n_uopt)
         self.y = self.opti.variable(self.n_out, self.N)
         self.y_nnarx = self.opti.variable(self.n_out, self.N)
-        if self.Model == "BNNExp":
-            self.s = self.opti.variable(self.n_out, self.N)
-        else:
-            self.T_slack = self.opti.variable(1, self.N)
 
         self.J  = self.opti.variable(1, 1)
         self.Pb  = self.opti.variable(2, self.N)
+        self.slack_y = self.opti.variable(self.n_out, self.N)
+
         if self.Model == "BNNExp":
             self.slack_explo = self.opti.variable(self.n_out, self.N) #MODIFIED
             self.sigmaK = self.opti.variable(self.N, self.n_out)
-
+        else:
+            self.T_slack = self.opti.variable(1, self.N)
 
     def SetConstraints(self):
          ### Constraints ###
           
-        self.opti.subject_to(self.Ts_min <= self.u[5,:])
+        self.opti.subject_to(self.Ts_min_eb <= self.u[5,:])
         self.opti.subject_to(self.Ts_max_eb>= self.u[5,:])
-        self.opti.subject_to(self.Ts_min<= self.u[4,:])
-        self.opti.subject_to(self.Ts_max >= self.u[4,:])
-        self.opti.subject_to(self.Potenze[:,self.t] + self.P_Shift_mpc1== self.u[0:4, 0])
-        self.opti.subject_to(self.Potenze[:,self.t+3]+ self.P_Shift_mpc2== self.u[0:4, 1])
-        self.opti.subject_to(self.Potenze[:,self.t+6]+ self.P_Shift_mpc3== self.u[0:4, 2])
-        self.opti.subject_to(self.Potenze[:,self.t+9]+ self.P_Shift_mpc4== self.u[0:4, 3])
+        self.opti.subject_to(self.Ts_min_gb<= self.u[4,:])
+        self.opti.subject_to(self.Ts_max_gb >= self.u[4,:])
+
+        if self.t > self.num_steps - 4:
+            self.opti.subject_to(self.Potenze[:,self.t-2] + self.P_Shift_mpc1 == self.u[0:4, 0])
+            self.opti.subject_to(self.Potenze[:,self.t-2+3]+ self.P_Shift_mpc2 == self.u[0:4, 1])
+            self.opti.subject_to(self.Potenze[:,self.t-2+6]+ self.P_Shift_mpc3 == self.u[0:4, 2])
+            self.opti.subject_to(self.Potenze[:,self.t-2+9]+ self.P_Shift_mpc4 == self.u[0:4, 3])
+        else:
+            self.opti.subject_to(self.Potenze[:,self.t] + self.P_Shift_mpc1 == self.u[0:4, 0])
+            self.opti.subject_to(self.Potenze[:,self.t+3]+ self.P_Shift_mpc2 == self.u[0:4, 1])
+            self.opti.subject_to(self.Potenze[:,self.t+6]+ self.P_Shift_mpc3 == self.u[0:4, 2])
+            self.opti.subject_to(self.Potenze[:,self.t+9]+ self.P_Shift_mpc4 == self.u[0:4, 3])
         
         # System dynamics constraint 
         y_N,output_rnn,sigma_est= self.model_rnn(self.t,self.data, self.u, self.y_prec,self.u_prec,self.xk,self.uk,self.y,self.N/self.Nb,self.y_rnn,self.theta)
@@ -630,22 +642,22 @@ class MPC:
 
 
         if self.Model== 'BNNExp': 
-            self.opti.subject_to((self.Ts_min_supply - self.out_bias[0])/self.out_scale[0] + self.beta[0]*(self.sigmaK[:,0]).T - self.s[0,:] <= (self.y[0,:] - self.out_bias[0])/self.out_scale[0])
-            self.opti.subject_to((self.Ts_max - self.out_bias[0])/self.out_scale[0] - self.beta[0]*(self.sigmaK[:,0]).T + self.s[0,:] >= (self.y[0,:] - self.out_bias[0])/self.out_scale[0]) 
+            self.opti.subject_to((self.Ts_min_supply - self.out_bias[0])/self.out_scale[0] + self.beta[0]*(self.sigmaK[:,0]).T - self.slack_y[0,:] <= (self.y[0,:] - self.out_bias[0])/self.out_scale[0])
+            self.opti.subject_to((self.Ts_max - self.out_bias[0])/self.out_scale[0] - self.beta[0]*(self.sigmaK[:,0]).T + self.slack_y[0,:] >= (self.y[0,:] - self.out_bias[0])/self.out_scale[0]) 
       
             # Tr_min <= Tr <= Tr_max
-            self.opti.subject_to((self.Tr_min - self.out_bias[1])/self.out_scale[1] + self.beta[1]*(self.sigmaK[:,1]).T - self.s[1,:] <= (self.y[1,:] - self.out_bias[1])/self.out_scale[1])
-            self.opti.subject_to((self.Tr_max - self.out_bias[1])/self.out_scale[1] - self.beta[1]*(self.sigmaK[:,1]).T + self.s[1,:] >= (self.y[1,:] - self.out_bias[1])/self.out_scale[1]) 
+            self.opti.subject_to((self.Tr_min - self.out_bias[1])/self.out_scale[1] + self.beta[1]*(self.sigmaK[:,1]).T - self.slack_y[1,:] <= (self.y[1,:] - self.out_bias[1])/self.out_scale[1])
+            self.opti.subject_to((self.Tr_max - self.out_bias[1])/self.out_scale[1] - self.beta[1]*(self.sigmaK[:,1]).T + self.slack_y[1,:] >= (self.y[1,:] - self.out_bias[1])/self.out_scale[1]) 
 
             # q_min <= q <= q_max
-            self.opti.subject_to((self.m_min - self.out_bias[2])/self.out_scale[2] + self.beta[2]*(self.sigmaK[:,2]).T - self.s[2,:] <= (self.y[2,:] - self.out_bias[2])/self.out_scale[2])
-            self.opti.subject_to((self.m_max - self.out_bias[2])/self.out_scale[2] - self.beta[2]*(self.sigmaK[:,2]).T + self.s[2,:] >= (self.y[2,:] - self.out_bias[2])/self.out_scale[2]) 
+            self.opti.subject_to((self.m_min - self.out_bias[2])/self.out_scale[2] + self.beta[2]*(self.sigmaK[:,2]).T - self.slack_y[2,:] <= (self.y[2,:] - self.out_bias[2])/self.out_scale[2])
+            self.opti.subject_to((self.m_max - self.out_bias[2])/self.out_scale[2] - self.beta[2]*(self.sigmaK[:,2]).T + self.slack_y[2,:] >= (self.y[2,:] - self.out_bias[2])/self.out_scale[2]) 
 
             self.opti.subject_to(self.sigmaK==sigma_est)  
 
             for i in range(0,self.n_out):
-                self.opti.subject_to(self.s[i,:] >= 1e-8)
-                self.opti.subject_to(self.s[i,:] <= 50) 
+                self.opti.subject_to(self.slack_y[i,:] >= 1e-8)
+                self.opti.subject_to(self.slack_y[i,:] <= 50) 
                 self.opti.subject_to(self.slack_explo[i,:] >= 1e-6)
                 self.opti.subject_to(self.slack_explo[i,:] <= 1e1) 
 
@@ -668,7 +680,7 @@ class MPC:
 
         if self.Model == 'BNNExp':
             for i in range(self.n_out):
-                self.opti.subject_to(self.s[i,:] >= 1e-8)
+                self.opti.subject_to(self.slack_y[i,:] >= 1e-8)
 
         # #Δu_min < Δu < Δu_max
         delta = 5 #TUNING
@@ -731,7 +743,7 @@ class MPC:
             if self.Model=="BNNExp":
                 # self.opti.subject_to(self.J ==1*(gamma_pred_gas @(1/1000*self.Ts/3600 * self.Pb[0,:].T/COP)+
                 # gamma_pred_el @ (1/1000*self.Ts/3600 * self.Pb[1,:].T/1)+ gamma*(self.y[0,self.N-1] -T_ref*casadi.MX.ones((1, 1)))**2+ gamma_slack*casadi.sum1(casadi.sum2(self.s))) + gamma_exp@self.slack_explo*self.flag )
-                self.opti.subject_to(self.J ==gamma_pred_gas @(1/1000*self.Ts/3600 * self.Pb[0,:].T/COP)+gamma_pred_el @ (1/1000*self.Ts/3600 * self.Pb[1,:].T/eff_EB)+ gamma*(self.y[0,self.N-1] -T_ref*casadi.MX.ones((1, 1)))**2+ gamma_slack[0]*casadi.sum1(self.s[0,:]) + gamma_slack[1]*casadi.sum1(self.s[1,:]) + gamma_slack[2]*casadi.sum1(self.s[2,:]) + gamma_exp@self.slack_explo@np.ones((self.N, 1))*self.flag )
+                self.opti.subject_to(self.J ==gamma_pred_gas @(1/1000*self.Ts/3600 * self.Pb[0,:].T/COP)+gamma_pred_el @ (1/1000*self.Ts/3600 * self.Pb[1,:].T/eff_EB)+ gamma*(self.y[0,self.N-1] -T_ref*casadi.MX.ones((1, 1)))**2+ gamma_slack[0]*casadi.sum1(self.slack_y[0,:]) + gamma_slack[1]*casadi.sum1(self.slack_y[1,:]) + gamma_slack[2]*casadi.sum1(self.slack_y[2,:]) + gamma_exp@self.slack_explo@np.ones((self.N, 1))*self.flag )
             else:
                 self.opti.subject_to(self.J ==gamma_pred_gas @(1/1000*self.Ts/3600 * self.Pb[0,:].T/COP)+gamma_pred_el @ (1/1000*self.Ts/3600 * self.Pb[1,:].T/eff_EB)+ gamma*(self.y[0,self.N-1] -T_ref*casadi.MX.ones((1, 1)))**2+casadi.sum1(self.T_slack)*alpha_slack)
         
@@ -793,9 +805,9 @@ class MPC:
                 for i in range(self.n_out):
                     self.opti.set_initial(self.sigmaK[:,i], 0.05*np.ones([self.N,1]))
                 self.opti.set_initial(self.slack_explo, np.zeros([self.n_out,self.N]))  #MODIFY - TUNING PARAMETER
-                self.opti.set_initial(self.s, np.zeros([self.n_out, self.N]))
+                self.opti.set_initial(self.slack_y, np.zeros([self.n_out, self.N]))
             else:
-                self.opti.set_initial(self.s, np.zeros([n_slack,1]))  
+                self.opti.set_initial(self.slack_y, np.zeros([n_slack,1]))  
 
 
             self.opti.minimize(self.J);                  
@@ -828,7 +840,7 @@ class MPC:
             
                 y_pred = sol.value(self.y)
                 if self.Model == 'BNNExp':
-                    slack = sol.value(self.s)
+                    slack = sol.value(self.slack_y)
                     slack_explo = sol.value(self.slack_explo)
                     sigma_pred = sol.value(self.sigmaK)
                 else:
@@ -839,19 +851,54 @@ class MPC:
                 J_pred = sol.value(self.J)
                 y_nnarx=sol.value(self.y_nnarx)
             except Exception as ex:
-                print('*** Problem not solved  -  Takes last Feasible Solution!***')
-
-                u_opt =self.u_prec[:,0]
-                # Other variables
-                u_pred = self.u_prec
-
-                y_pred = self.y_prec
-                slack = np.zeros([n_slack,1])
-                slack_explo = np.zeros([self.n_out, self.N]) if self.Model == 'BNNExp' else 0
-                Pb_pred=self.Pb_prec
-                J_pred = self.J_prec
-                y_nnarx=self.y_prec
-                sigma_pred = self.sigma_prec
+                print('*** Problem not solved  -  First IPOPT attempt failed, retrying with relaxed tolerances ***')
+                try:
+                    self.opti.minimize(0.01 * self.J)
+                    prob_opts = {
+                        'expand': True,
+                        'ipopt': {
+                            'print_level': 0,
+                        },
+                        'print_time': False
+                    }
+                    ip_opts = {
+                        'print_level': 0,
+                        'max_iter': int(1e4),
+                        'compl_inf_tol': 1e-4,
+                        'acceptable_tol': 1e-4,
+                        'acceptable_iter': 10,
+                        'mu_strategy': 'adaptive'
+                    }
+                    self.opti.solver('ipopt', prob_opts, ip_opts)
+                    sol = self.opti.solve()
+                    print('*** Problem solved on second attempt ***')
+                    u_opt = sol.value(self.u[:, 0])
+                    u_pred = sol.value(self.u)
+                    y_pred = sol.value(self.y)
+                    if self.Model == 'BNNExp':
+                        slack = sol.value(self.slack_y)
+                        slack_explo = sol.value(self.slack_explo)
+                        sigma_pred = sol.value(self.sigmaK)
+                    else:
+                        slack = np.zeros([n_slack, 1])
+                        slack_explo = 0
+                        sigma_pred = self.sigma_prec
+                    Pb_pred = sol.value(self.Pb)
+                    J_pred = sol.value(self.J)
+                    y_nnarx = sol.value(self.y_nnarx)
+                except Exception as ex2:
+                    print('*** Problem not solved  -  Takes last Feasible Solution!***')
+                    fallback_u_pred = self.u_prec.copy()
+                    fallback_u_pred[0:4, 0] = self.Potenze[:, self.t] + self.P_Shift_mpc1
+                    u_opt = fallback_u_pred[:,0]
+                    u_pred = fallback_u_pred
+                    y_pred = self.y_prec
+                    slack = np.zeros([n_slack,1])
+                    slack_explo = np.zeros([self.n_out, self.N]) if self.Model == 'BNNExp' else 0
+                    Pb_pred=self.Pb_prec
+                    J_pred = self.J_prec
+                    y_nnarx=self.y_prec
+                    sigma_pred = self.sigma_prec
         
         ### save prev values ###      
         self.J_prec=J_pred
@@ -982,14 +1029,14 @@ class MPC:
         ### NNARX Prediction ###
         states,outputs,Sigma=self.simulate_dynamics(k,initial_state, U[:,:], A, Bu, Bx, C, N,weights,n_states,ground_truth,theta)
 
-        if self.Model=='NNARX' or self.Model=='BNN':
+        if self.Model=='NNARX' or self.Model=='BNN' or self.Model=='BNNExp':
             ### Denormalization Prediction ###
             for i in range(n_out):
                 
                 for j in range(N):
                        
                         Y_RNN[i,j]=out_scale[i] * outputs[i,j]+out_bias[i]*np.ones([1, 1]) # * per prodotto scalare
-
+                        
         ### GP Correction ###
         elif self.Model=='GP':
         

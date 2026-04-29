@@ -192,7 +192,7 @@ def MPC_solve():
     try:
         ### Save Data ###
         SaveData(controller.y_out, controller.u_out, controller.s_out, controller.Pb_pred_out, controller.final_cost, 
-        controller.computation_time, k, controller.Param["Model"], controller.InitialDate)
+        controller.computation_time, k, controller.Param["Model"], controller.InitialDate, controller.exploration)
 
         if np.mod(k,controller.Param["T_C0"]-1)==0 or k==0:
             #send the control law

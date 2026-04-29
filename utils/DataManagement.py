@@ -38,6 +38,7 @@ def SaveAggregatedData(controller, t_step):
     save_col(controller.u_out,          f'controlLaw_{InitialDate}.csv')
     save_col(controller.Pb_pred_out,    f'Pb_{InitialDate}.csv')
     save_col(controller.s_out,          f'slack_{InitialDate}.csv')
+    save_col(controller.exploration,    f'exploration_{InitialDate}.csv')
     save_scalar(controller.final_cost,         f'final_cost_{InitialDate}.csv')
     save_scalar(controller.computation_time,   f'computational_time_{InitialDate}.csv')
 
@@ -58,7 +59,7 @@ def SaveAggregatedData(controller, t_step):
     print(np.mean(controller.computation_time[:t_step + 1]))
 
 
-def SaveData(y, u, s, Pb_pred, final_cost, computational_time, t_step, Model, InitialDate):
+def SaveData(y, u, s, Pb_pred, final_cost, computational_time, t_step, Model, InitialDate, exploration=None):
     # Create folder name with current date
     folder_name = f"Solutions/{Model}/{datetime.now().strftime('%d%m')}"
     
@@ -67,16 +68,19 @@ def SaveData(y, u, s, Pb_pred, final_cost, computational_time, t_step, Model, In
         os.makedirs(folder_name, exist_ok=True)
     
     def save_with_timestamp(data, filename,k):
-        if 'final_cost' in filename or 'computational_time' in filename:
-            dati = data[k].reshape(1, -1)
+        data = np.asarray(data)
+        if data.ndim == 1:
+            row = np.atleast_2d(data[k]).reshape(1, -1)
+        elif 'final_cost' in filename or 'computational_time' in filename:
+            row = np.atleast_2d(data[k]).reshape(1, -1)
         else:
-            dati = data[:,k].reshape(1, -1)
+            row = np.atleast_2d(data[:, k]).reshape(1, -1)
         filepath = os.path.join(folder_name, filename)
         # Open in append mode so existing files get new lines instead of being overwritten
         with open(filepath, 'a', newline='') as file:
             writer = csv.writer(file)
-            for riga in dati:
-            # Add timestamp (hour:minute) to beginning of each row
+            for riga in row:
+                # Add timestamp (hour:minute) to beginning of each row
                 timestamp = datetime.now().strftime('%H:%M')
                 if np.isscalar(riga):
                     row_with_time = [timestamp, t_step, float(riga)]
@@ -91,5 +95,7 @@ def SaveData(y, u, s, Pb_pred, final_cost, computational_time, t_step, Model, In
     save_with_timestamp(s, f'slack_{InitialDate}.csv', t_step)
     save_with_timestamp(final_cost, f'final_cost_{InitialDate}.csv', t_step)
     save_with_timestamp(computational_time, f'computational_time_{InitialDate}.csv', t_step)
+    if exploration is not None:
+        save_with_timestamp(exploration, f'exploration_{InitialDate}.csv', t_step)
 
     print(np.mean(computational_time))
