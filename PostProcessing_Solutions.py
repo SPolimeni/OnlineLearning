@@ -88,6 +88,26 @@ def load_csv_vector(path):
     return np.atleast_1d(np.genfromtxt(path, delimiter=',', dtype=float, usecols=2))
 
 
+def ensure_plots_folder(solution_folder):
+    plots_folder = Path(solution_folder) / 'Plots'
+    plots_folder.mkdir(parents=True, exist_ok=True)
+    return plots_folder
+
+
+def save_plot(plots_folder, name=None, dpi=200):
+    plots_folder = Path(plots_folder)
+    plots_folder.mkdir(parents=True, exist_ok=True)
+    save_plot.counter += 1
+    filename = name or f'plot_{save_plot.counter:02d}'
+    path = plots_folder / f'{filename}.png'
+    plt.tight_layout(pad=2.0)
+    plt.savefig(path, dpi=dpi, bbox_inches='tight')
+    plt.close()
+    return path
+
+save_plot.counter = 0
+
+
 def load_solution_data(solution_folder):
     solution_folder = Path(solution_folder)
     config_path = find_latest_file(solution_folder, 'config', '.csv')
@@ -115,6 +135,31 @@ def load_solution_data(solution_folder):
         theta_sigma = pickle.load(f)
     theta_BNN = theta_sigma['theta']
     sigma = theta_sigma['sigma']
+
+    # Align all loaded data to the actual prediction horizon from y_pred
+    num_steps = int(min(
+        y.shape[1],
+        y_pred.shape[1],
+        y_pred0.shape[1],
+        u.shape[1],
+        Pb_pred.shape[1],
+        exploration.shape[1] if exploration.ndim > 1 else exploration.shape[0],
+        final_cost.shape[0],
+        computation_time.shape[0],
+        sigma.shape[1] if sigma.ndim > 1 else sigma.shape[0],
+        theta_BNN.shape[0] if theta_BNN.ndim > 0 else 0,
+    ))
+
+    y = y[:, :num_steps]
+    y_pred = y_pred[:, :num_steps]
+    y_pred0 = y_pred0[:, :num_steps]
+    u = u[:, :num_steps]
+    Pb_pred = Pb_pred[:, :num_steps]
+    exploration = exploration[:, :num_steps] if exploration.ndim > 1 else exploration[:num_steps]
+    final_cost = final_cost[:num_steps]
+    computation_time = computation_time[:num_steps]
+    sigma = sigma[:, :num_steps] if sigma.ndim > 1 else sigma[:num_steps]
+    theta_BNN = theta_BNN[:num_steps]
 
     c_el = np.asarray(config['c_el'], dtype=float)
     if c_el.ndim == 1:
@@ -176,7 +221,10 @@ def load_solution_data(solution_folder):
 
 def main(solution_folder=None):
     if solution_folder is None:
-        solution_folder = Path(__file__).resolve().parent / 'Solutions' / 'BNNExp' / '2904'
+        solution_subfolder = 'BNNExp'
+        solution_run = '2904'
+        solution_folder = Path(__file__).resolve().parent / 'Solutions' / solution_subfolder / solution_run
+    plots_folder = ensure_plots_folder(solution_folder)
     data = load_solution_data(solution_folder)
 
     y = data['y']
@@ -247,7 +295,7 @@ def main(solution_folder=None):
     plt.title(r'beta[0]*sigma[0] ', fontsize=30)
     plt.tick_params(axis='both', labelsize=30)
     plt.xlim((0, ore_tot))
-    plt.show()
+    save_plot(plots_folder)
 
     plt.plot(1 / 3600 * time_points[4:num_steps - 1], beta[1] * sigma[1, 4:num_steps - 1], linewidth=4)
     plt.plot(
@@ -282,7 +330,7 @@ def main(solution_folder=None):
     plt.title(r'beta[1]*sigma[1] ', fontsize=30)
     plt.tick_params(axis='both', labelsize=30)
     plt.xlim((0, ore_tot))
-    plt.show()
+    save_plot(plots_folder)
 
     plt.plot(1 / 3600 * time_points[4:num_steps - 1], beta[2] * sigma[2, 4:num_steps - 1], linewidth=4)
     plt.plot(
@@ -317,7 +365,7 @@ def main(solution_folder=None):
     plt.title(r'beta[2]*sigma[2] ', fontsize=30)
     plt.tick_params(axis='both', labelsize=30)
     plt.xlim((0, ore_tot))
-    plt.show()
+    save_plot(plots_folder)
 
     ##################### PRICE #####################
     price = np.zeros(num_steps)
@@ -332,7 +380,7 @@ def main(solution_folder=None):
     plt.title('Electricity price profile', fontsize=30)
     plt.tick_params(axis='both', labelsize=30)
     plt.xlim((0, ore_tot))
-    plt.show()
+    save_plot(plots_folder)
 
     ###################### OUTPUTS #####################
     y_BLL_max = ((y_pred - out_bias.reshape(n_out, 1)) / out_scale.reshape(n_out, 1)) + beta.reshape(n_out, 1) * sigma
@@ -352,7 +400,7 @@ def main(solution_folder=None):
     plt.title('Load supply temperature', fontsize=30)
     plt.tick_params(axis='both', labelsize=30)
     plt.xlim((0, ore_tot))
-    plt.show()
+    save_plot(plots_folder)
 
     plt.plot(1 / 3600 * time_points, y[1, :], label='Simulator', linewidth=4)
     plt.plot(1 / 3600 * time_points, y_pred[1, :], label='Output BNN', linewidth=4)
@@ -366,7 +414,7 @@ def main(solution_folder=None):
     plt.title('Return temperature', fontsize=30)
     plt.tick_params(axis='both', labelsize=30)
     plt.xlim((0, ore_tot))
-    plt.show()
+    save_plot(plots_folder)
 
     plt.plot(1 / 3600 * time_points, y[2, :], label='Simulator', linewidth=4)
     plt.plot(1 / 3600 * time_points, y_pred[2, :], label='Output BNN', linewidth=4)
@@ -380,7 +428,7 @@ def main(solution_folder=None):
     plt.title('Flow rate', fontsize=30)
     plt.tick_params(axis='both', labelsize=30)
     plt.xlim((0, ore_tot))
-    plt.show()
+    save_plot(plots_folder)
 
     ###################### INPUTS #####################
     plt.plot(1 / 3600 * time_points[:num_steps - 1], u[4, :num_steps - 1], linewidth=4)
@@ -391,7 +439,7 @@ def main(solution_folder=None):
     plt.title('Gas boiler input temperature', fontsize=30)
     plt.tick_params(axis='both', labelsize=30)
     plt.xlim((0, ore_tot))
-    plt.show()
+    save_plot(plots_folder)
 
     plt.plot(1 / 3600 * time_points[0:num_steps - 1], u[5, :num_steps - 1], linewidth=4)
     plt.plot(1 / 3600 * time_points[0:num_steps - 1], Ts_max_eb * np.ones(Pb_pred[1, :num_steps - 1].shape), 'k', linewidth=4)
@@ -402,7 +450,7 @@ def main(solution_folder=None):
     plt.tight_layout(pad=2.0)
     plt.title('Electric boiler input temperature', fontsize=30)
     plt.xlim((0, ore_tot))
-    plt.show()
+    save_plot(plots_folder)
 
     ###################### POWER #####################
     plt.plot(1 / 3600 * time_points[:num_steps - 1], 1 / 1000 * Pb_pred[0, :num_steps - 1], linewidth=4)
@@ -413,7 +461,7 @@ def main(solution_folder=None):
     plt.tick_params(axis='both', labelsize=30)
     plt.title('Gas boiler power', fontsize=30)
     plt.xlim((0, ore_tot))
-    plt.show()
+    save_plot(plots_folder)
 
     plt.plot(1 / 3600 * time_points[0:num_steps - 1], 1 / 1000 * Pb_pred[1, :num_steps - 1], linewidth=4)
     plt.plot(1 / 3600 * time_points[0:num_steps - 1], 1 / 1000 * Pb_min_eb * np.ones(Pb_pred[1, :num_steps - 1].shape), 'k', linewidth=4)
@@ -423,7 +471,7 @@ def main(solution_folder=None):
     plt.tick_params(axis='both', labelsize=30)
     plt.title('Electric boiler power', fontsize=30)
     plt.xlim((0, ore_tot))
-    plt.show()
+    save_plot(plots_folder)
 
     for j in range(0, n_out):
         plt.figure(figsize=(10, 7.5))
@@ -439,8 +487,7 @@ def main(solution_folder=None):
         plt.ylabel('Theta')
         plt.title(f'All parameters Output {j}')
         plt.tight_layout()
-        plt.show()
-
+        save_plot(plots_folder)
     potenza_totale = u[0, :num_steps - 1] + u[1, :num_steps - 1] + u[2, :num_steps - 1] + u[3, :num_steps - 1]
 
     plt.plot(1 / 3600 * time_points[:num_steps - 1], u[0, :num_steps - 1], 'b-')
@@ -453,7 +500,7 @@ def main(solution_folder=None):
     plt.tick_params(axis='both', labelsize=18)
     plt.legend()
     plt.tight_layout(pad=2.0)
-    plt.show()
+    save_plot(plots_folder)
 
     plt.plot(1 / 3600 * time_points[:num_steps - 1], potenza_totale, 'k-')
     plt.xlabel('Time [h]', fontsize=8)
@@ -462,7 +509,7 @@ def main(solution_folder=None):
     plt.tick_params(axis='both', labelsize=18)
     plt.legend()
     plt.tight_layout(pad=2.0)
-    plt.show()
+    save_plot(plots_folder)
 
     costo = np.sum(final_cost[:num_steps - 1])
     print(costo)
