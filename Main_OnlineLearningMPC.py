@@ -368,8 +368,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
     Param["Model"] = args.Model
 
-    Opts['Debug']   = True
-    Param['Model']  = 'BNNExp'
+    # Opts['Debug']   = True
+    # Param['Model']  = 'BNNExp'
 
     # Initizialization of MPC
     controller              = MPC(Param)
