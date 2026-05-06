@@ -203,7 +203,7 @@ def load_solution_data(solution_folder):
         'time_points': time_points,
         'ore_tot': ore_tot,
         'Ts_max': float(config['Ts_max']),
-        'Ts_min': float(config['Ts_min']),
+        'Ts_min_supply': float(config['Ts_min_supply']),
         'Tr_max': float(config['Tr_max']),
         'Tr_min': float(config['Tr_min']),
         'q_max': float(config['m_max']),
@@ -222,7 +222,7 @@ def load_solution_data(solution_folder):
 def main(solution_folder=None):
     if solution_folder is None:
         solution_subfolder = 'BNNExp'
-        solution_run = '2904'
+        solution_run = '0605'
         solution_folder = Path(__file__).resolve().parent / 'Solutions' / solution_subfolder / solution_run
     plots_folder = ensure_plots_folder(solution_folder)
     data = load_solution_data(solution_folder)
@@ -247,7 +247,7 @@ def main(solution_folder=None):
     time_points = data['time_points']
     ore_tot = data['ore_tot']
     Ts_max = data['Ts_max']
-    Ts_min = data['Ts_min']
+    Ts_min_supply = data['Ts_min_supply']
     Tr_max = data['Tr_max']
     Tr_min = data['Tr_min']
     q_max = data['q_max']
@@ -390,9 +390,8 @@ def main(solution_folder=None):
 
     plt.plot(1 / 3600 * time_points, y[0, :], label='Simulator', linewidth=4)
     plt.plot(1 / 3600 * time_points, y_pred[0, :], label='Output BNN', linewidth=4)
-    plt.plot(1 / 3600 * time_points, y_pred0[0, :], label='Output Original NNARX', linewidth=2)
     plt.fill_between(1 / 3600 * time_points, y_BLL_min[0, :], y_BLL_max[0, :], color='orange', alpha=0.3)
-    plt.plot(1 / 3600 * time_points, Ts_min * np.ones(((y_pred[0, :]).shape[0], 1)), color='k', linewidth=4)
+    plt.plot(1 / 3600 * time_points, Ts_min_supply * np.ones(((y_pred[0, :]).shape[0], 1)), color='k', linewidth=4)
     plt.plot(1 / 3600 * time_points, Ts_max * np.ones(((y_pred[0, :]).shape[0], 1)), color='k', linewidth=4)
     plt.legend()
     plt.xlabel(r'Time [h]', fontsize=30)
@@ -404,7 +403,6 @@ def main(solution_folder=None):
 
     plt.plot(1 / 3600 * time_points, y[1, :], label='Simulator', linewidth=4)
     plt.plot(1 / 3600 * time_points, y_pred[1, :], label='Output BNN', linewidth=4)
-    plt.plot(1 / 3600 * time_points, y_pred0[1, :], label='Output Original NNARX', linewidth=2)
     plt.fill_between(1 / 3600 * time_points, y_BLL_min[1, :], y_BLL_max[1, :], color='orange', alpha=0.3)
     plt.plot(1 / 3600 * time_points, Tr_min * np.ones(((y_pred[0, :]).shape[0], 1)), color='k', linewidth=4)
     plt.plot(1 / 3600 * time_points, Tr_max * np.ones(((y_pred[0, :]).shape[0], 1)), color='k', linewidth=4)
@@ -418,7 +416,6 @@ def main(solution_folder=None):
 
     plt.plot(1 / 3600 * time_points, y[2, :], label='Simulator', linewidth=4)
     plt.plot(1 / 3600 * time_points, y_pred[2, :], label='Output BNN', linewidth=4)
-    plt.plot(1 / 3600 * time_points, y_pred0[2, :], label='Output Original NNARX', linewidth=2)
     plt.fill_between(1 / 3600 * time_points, y_BLL_min[2, :], y_BLL_max[2, :], color='orange', alpha=0.3)
     plt.plot(1 / 3600 * time_points, q_min * np.ones(((y_pred[0, :]).shape[0], 1)), color='k', linewidth=4)
     plt.plot(1 / 3600 * time_points, q_max * np.ones(((y_pred[0, :]).shape[0], 1)), color='k', linewidth=4)

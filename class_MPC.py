@@ -72,7 +72,6 @@ class MPC:
         self.Tr_min=Param["Tr_min"]
         self.Ts_max=Param["Ts_max"]
         self.Ts_max_eb=Param["Ts_max_eb"]
-        self.Ts_min=Param["Ts_min"]
         self.Ts_min_supply=Param["Ts_min_supply"]
         self.Ts_max_gb=Param["Ts_max_gb"]
         self.Ts_min_gb=Param["Ts_min_gb"]

@@ -312,12 +312,11 @@ if __name__ == "__main__":
         "Ts_max"            :80,
         "Ts_max_eb"         :72,
         "Ts_min_supply"     :67,    #HARD CODED 
-        "Ts_min"            :65,    #MINIMUN GENERATORS
         "Ts_max_eb"         :72,     #TEST PAR ALB2 preso dai file test Simone
         "Ts_min_eb"         :65,     #TEST PAR
         "Ts_max_gb"         :80,     #TEST PAR
         "Ts_min_gb"         :65,     #TEST PAR
-        "m_max"             :10,
+        "m_max"             :5,
         "m_min"             :2,
         "Pb_max"            :147e3,
         "Pb_min"            :60e3,
@@ -330,7 +329,7 @@ if __name__ == "__main__":
         "L_prev0"           :100,    #MODIFIED
         "sigma_epsilon0_2"  :0.001, #MODIFIED
         "gamma"             :0.2,   #MODIFIED
-        "T_ref"             :70.5,  #MODIFIED
+        "T_ref"             :70,  #MODIFIED
         "c_gas"             :0.034, #MODIFIED
         "COP"               :0.8,   #MODIFIED
         "eff_EB"            :0.8,   #MODIFIED
@@ -339,12 +338,12 @@ if __name__ == "__main__":
         "alpha_slack0"      :100,   #MODIFIED
         "nnarx_mat"         :os.path.join('NNmodels','net_1020.mat'),  #TUNING -DA VERIFICARE!!!
         "c_el"              :np.genfromtxt('20250501_20250501_MGP_PrezziZonali_Nord.csv', delimiter=';', usecols=(2), skip_header=2),
-        "Potenza"           :np.genfromtxt('DHN_ground_truth.csv', delimiter=',', usecols=(3,4,5,6), skip_header=28),#potenza all'istante k
+        "Potenza"           :np.genfromtxt('DHN_ground_truth_shifted.csv', delimiter=',', usecols=(3,4,5,6), skip_header=28),#potenza all'istante k
         "P_Shift"           :4000, 
         "P_Shift_mpc1"      :0,     #MODIFIED  
-        "P_Shift_mpc2"      :1000,  #MODIFIED          
-        "P_Shift_mpc3"      :1000,  #MODIFIED          
-        "P_Shift_mpc4"      :1000,  #MODIFIED                    
+        "P_Shift_mpc2"      :0,  #MODIFIED          
+        "P_Shift_mpc3"      :0,  #MODIFIED          
+        "P_Shift_mpc4"      :0,  #MODIFIED                    
         "Model"             :'BNNExp',
         "T_C0"              :4, #istante in cui inizio ad applicare la legge di controllo
         "n_slack"           :1,
