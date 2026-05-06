@@ -354,7 +354,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--Model",
         type=str,
-        default='NNARX',
+        default='BNNExp',
         help="Set the model type: 'NNARX', 'GP', or 'BNN' or 'BNNExp'",
     )
     parser.add_argument(
@@ -368,8 +368,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
     Param["Model"] = args.Model
 
-    # Opts['Debug']   = True
-    # Param['Model']  = 'BNNExp'
+    Opts['Debug']   = True
+    Param['Model']  = 'BNNExp'
 
     # Initizialization of MPC
     controller              = MPC(Param)
