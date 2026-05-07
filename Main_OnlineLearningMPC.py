@@ -88,8 +88,8 @@ def SetPointsToDERTF(Solved=True):
         controller.SetPointsWriter.DataMap['Power_HL2']['Value'] = -1e-3 * GetValue(controller.u_out[1, k]) # W to kW
         controller.SetPointsWriter.DataMap['Power_HL3']['Value'] = -1e-3 * GetValue(controller.u_out[2, k]) # W to kW
         controller.SetPointsWriter.DataMap['Power_HL4']['Value'] = -1e-3 * GetValue(controller.u_out[3, k]) # W to kW
-        controller.SetPointsWriter.DataMap['T_out_GB']['Value']  = GetValue(controller.u_out[4, k])
-        controller.SetPointsWriter.DataMap['T_out_EB']['Value']  = GetValue(controller.u_out[5, k])
+        controller.SetPointsWriter.DataMap['T_out_GB']['Value']  = GetValue(controller.u_out[4, k]) + 1
+        controller.SetPointsWriter.DataMap['T_out_EB']['Value']  = GetValue(controller.u_out[5, k]) + 1
 
         if abs(controller.SetPointsWriter.DataMap['Power_HL1']['Value']) < 10:
             controller.SetPointsWriter.DataMap['Power_HL1']['Value'] = 32
@@ -311,7 +311,7 @@ if __name__ == "__main__":
         "Tr_min"            :45, 
         "Ts_max"            :80,
         "Ts_max_eb"         :72,
-        "Ts_min_supply"     :67,    #HARD CODED 
+        "Ts_min_supply"     :68,     #HARD CODED 
         "Ts_max_eb"         :72,     #TEST PAR ALB2 preso dai file test Simone
         "Ts_min_eb"         :65,     #TEST PAR
         "Ts_max_gb"         :80,     #TEST PAR
