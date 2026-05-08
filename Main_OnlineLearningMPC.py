@@ -311,7 +311,7 @@ if __name__ == "__main__":
         "Tr_min"            :45, 
         "Ts_max"            :80,
         "Ts_max_eb"         :72,
-        "Ts_min_supply"     :68,     #HARD CODED 
+        "Ts_min_supply"     :70,     #HARD CODED 
         "Ts_max_eb"         :72,     #TEST PAR ALB2 preso dai file test Simone
         "Ts_min_eb"         :65,     #TEST PAR
         "Ts_max_gb"         :80,     #TEST PAR
