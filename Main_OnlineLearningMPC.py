@@ -311,7 +311,7 @@ if __name__ == "__main__":
         "Tr_min"            :45, 
         "Ts_max"            :75,
         "Ts_max_eb"         :72,
-        "Ts_min_supply"     :68,     #HARD CODED 
+        "Ts_min_supply"     :70,     #HARD CODED 
         "Ts_max_eb"         :72,     #TEST PAR ALB2 preso dai file test Simone
         "Ts_min_eb"         :65,     #TEST PAR
         "Ts_max_gb"         :75,     #TEST PAR
@@ -339,7 +339,7 @@ if __name__ == "__main__":
         "nnarx_mat"         :os.path.join('NNmodels','net_1020.mat'),  #TUNING -DA VERIFICARE!!!
         "c_el"              :np.genfromtxt('20250501_20250501_MGP_PrezziZonali_Nord.csv', delimiter=';', usecols=(2), skip_header=2),
         "Potenza"           :np.genfromtxt('DHN_ground_truth_shifted.csv', delimiter=',', usecols=(3,4,5,6), skip_header=28),#potenza all'istante k
-        "P_Shift"           :5000, 
+        "P_Shift"           :4000, 
         "P_Shift_mpc1"      :0,     #MODIFIED  
         "P_Shift_mpc2"      :0,  #MODIFIED          
         "P_Shift_mpc3"      :0,  #MODIFIED          
