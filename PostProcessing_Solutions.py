@@ -6,6 +6,7 @@ import argparse
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.io import loadmat
 
@@ -88,6 +89,42 @@ def load_csv_vector(path):
     return np.atleast_1d(np.genfromtxt(path, delimiter=',', dtype=float, usecols=2))
 
 
+def load_measurement_csvs(solution_folder, filename_prefix='', parse_dates=None, suffix='.csv'):
+    measures_folder = Path(solution_folder) / 'Misure'
+    if not measures_folder.exists():
+        raise FileNotFoundError(f'Measurement folder not found: {measures_folder}')
+
+    files = sorted(measures_folder.glob(f'{filename_prefix}*{suffix}'), key=lambda p: p.name)
+    if not files:
+        raise FileNotFoundError(
+            f'No measurement CSV files starting with {filename_prefix!r} found in {measures_folder}'
+        )
+
+    merged = None
+    for csv_path in files:
+        try:
+            df = pd.read_csv(csv_path, parse_dates=parse_dates) if parse_dates else pd.read_csv(csv_path)
+        except ValueError:
+            df = pd.read_csv(csv_path)
+
+        if 'Time' in df.columns:
+            df = df.set_index('Time')
+        elif parse_dates and parse_dates[0] in df.columns:
+            df = df.set_index(parse_dates[0])
+        else:
+            raise ValueError(f"Could not find a 'Time' column in {csv_path}")
+
+        if merged is None:
+            merged = df
+        else:
+            # Mantieni solo le colonne nuove che non sono già presenti
+            new_cols = [col for col in df.columns if col not in merged.columns]
+            if new_cols:
+                merged = merged.join(df[new_cols], how='outer')
+
+    return merged.reset_index() if merged is not None else pd.DataFrame()
+
+
 def ensure_plots_folder(solution_folder):
     plots_folder = Path(solution_folder) / 'Plots'
     plots_folder.mkdir(parents=True, exist_ok=True)
@@ -129,6 +166,12 @@ def load_solution_data(solution_folder):
 
     final_cost = load_csv_vector(find_latest_file(solution_folder, 'final_cost', '.csv'))
     computation_time = load_csv_vector(find_latest_file(solution_folder, 'computational_time', '.csv'))
+
+    measurements = None
+    try:
+        measurements = load_measurement_csvs(solution_folder, filename_prefix='', parse_dates=['Time'])
+    except FileNotFoundError:
+        measurements = pd.DataFrame()
 
     theta_sigma_file = find_latest_file(solution_folder, 'ThetaAndSigma', '.pkl')
     with open(theta_sigma_file, 'rb') as f:
@@ -216,13 +259,14 @@ def load_solution_data(solution_folder):
         'Pb_min_gb': float(config['Pb_min']),
         'Pb_max_eb': float(config['Pb_max_eb']),
         'Pb_min_eb': float(config['Pb_min_eb']),
+        'measurements': measurements,
     }
 
 
 def main(solution_folder=None):
     if solution_folder is None:
         solution_subfolder = 'BNNExp'
-        solution_run = '0605'
+        solution_run = '1105'
         solution_folder = Path(__file__).resolve().parent / 'Solutions' / solution_subfolder / solution_run
     plots_folder = ensure_plots_folder(solution_folder)
     data = load_solution_data(solution_folder)
@@ -518,5 +562,11 @@ def main(solution_folder=None):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Post-process saved BNNExp solution data.')
     parser.add_argument('solution_folder', nargs='?', default=None, help='Path to the solution folder to load')
+    parser.add_argument('--solution-subfolder', default='BNNExp', help='Subfolder under Solutions to use when no explicit solution folder is provided')
+    parser.add_argument('--solution-run', default='1105', help='Run folder name under the chosen subfolder when no explicit solution folder is provided')
     args = parser.parse_args()
+
+    if args.solution_folder is None:
+        args.solution_folder = Path(__file__).resolve().parent / 'Solutions' / args.solution_subfolder / args.solution_run
+
     main(args.solution_folder)
