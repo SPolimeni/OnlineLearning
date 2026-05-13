@@ -309,12 +309,12 @@ if __name__ == "__main__":
         "q_eb"              :3/3.6,  
         "Tr_max"            :66,
         "Tr_min"            :45, 
-        "Ts_max"            :80,
+        "Ts_max"            :75,
         "Ts_max_eb"         :72,
-        "Ts_min_supply"     :67,     #HARD CODED 
+        "Ts_min_supply"     :68,     #HARD CODED 
         "Ts_max_eb"         :72,     #TEST PAR ALB2 preso dai file test Simone
         "Ts_min_eb"         :65,     #TEST PAR
-        "Ts_max_gb"         :80,     #TEST PAR
+        "Ts_max_gb"         :75,     #TEST PAR
         "Ts_min_gb"         :65,     #TEST PAR
         "m_max"             :5,
         "m_min"             :2,
