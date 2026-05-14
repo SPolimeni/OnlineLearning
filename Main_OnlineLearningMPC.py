@@ -316,15 +316,15 @@ if __name__ == "__main__":
         "Ts_min_eb"         :65,     #TEST PAR
         "Ts_max_gb"         :75,     #TEST PAR
         "Ts_min_gb"         :65,     #TEST PAR
-        "m_max"             :5,
+        "m_max"             :7,
         "m_min"             :2,
         "Pb_max"            :147e3,
         "Pb_min"            :60e3,
         "Pb_max_eb"         :38e3,  # MODIFIED
         "Pb_min_eb"         :22e3,  # MODIFIED
         "beta0_1"           :35,    # MODIFIED
-        "beta0_2"           :15,    # MODIFIED
-        "beta0_3"           :15,    # MODIFIED
+        "beta0_2"           :30, #15,    # MODIFIED
+        "beta0_3"           :13, #15,    # MODIFIED
         "epsilon0"          :0.4,   # MODIFIED
         "L_prev0"           :100,    #MODIFIED
         "sigma_epsilon0_2"  :0.001, #MODIFIED
@@ -334,7 +334,7 @@ if __name__ == "__main__":
         "COP"               :0.8,   #MODIFIED
         "eff_EB"            :0.8,   #MODIFIED
         "gamma_exp0"        :5,     #MODIFIED
-        "gamma_slack0"      :1e2,   #MODIFIED
+        "gamma_slack0"      :5*1e2,   #MODIFIED
         "alpha_slack0"      :100,   #MODIFIED
         "nnarx_mat"         :os.path.join('NNmodels','net_1020.mat'),  #TUNING -DA VERIFICARE!!!
         "c_el"              :np.genfromtxt('20250501_20250501_MGP_PrezziZonali_Nord.csv', delimiter=';', usecols=(2), skip_header=2),
