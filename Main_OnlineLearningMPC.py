@@ -295,6 +295,7 @@ def MPC_solve():
 
 
 if __name__ == "__main__":
+# Programma principale
 
     Opts = {'Debug':False}
     
@@ -355,7 +356,7 @@ if __name__ == "__main__":
         "--Model",
         type=str,
         default='BNNExp',
-        help="Set the model type: 'NNARX', 'GP', or 'BNN' or 'BNNExp'",
+        help="Set the model type: 'NNARX', 'GP', or 'BNN' or 'BNNExp' or 'Benchmark'",
     )
     parser.add_argument(
         "--Debug",

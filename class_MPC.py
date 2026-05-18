@@ -612,11 +612,15 @@ class MPC:
 
     def SetConstraints(self):
          ### Constraints ###
-          
-        self.opti.subject_to(self.Ts_min_eb <= self.u[5,:])
-        self.opti.subject_to(self.Ts_max_eb>= self.u[5,:])
-        self.opti.subject_to(self.Ts_min_gb<= self.u[4,:])
-        self.opti.subject_to(self.Ts_max_gb >= self.u[4,:])
+        
+        if self.Model == 'Benchmark':
+            self.opti.subject_to(self.u[4,:] == 72)
+            self.opti.subject_to(self.u[5,:] == 72)
+        else: 
+            self.opti.subject_to(self.Ts_min_eb <= self.u[5,:])
+            self.opti.subject_to(self.Ts_max_eb>= self.u[5,:])
+            self.opti.subject_to(self.Ts_min_gb<= self.u[4,:])
+            self.opti.subject_to(self.Ts_max_gb >= self.u[4,:])
 
         if self.t > self.num_steps - 4:
             self.opti.subject_to(self.Potenze[:,self.t-2] + self.P_Shift_mpc1 == self.u[0:4, 0])
