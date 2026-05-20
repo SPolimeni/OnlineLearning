@@ -104,6 +104,10 @@ def SetPointsToDERTF(Solved=True):
         if controller.SetPointsWriter.DataMap['T_out_EB']['Value'] < 45:
             controller.SetPointsWriter.DataMap['T_out_EB']['Value'] = 72
 
+        if controller.Param['Model'] == 'Benchmark':
+            controller.SetPointsWriter.DataMap['T_out_GB']['Value']  = 73
+            controller.SetPointsWriter.DataMap['T_out_EB']['Value']  = 70
+
     except Exception as e:
         tb = traceback.extract_tb(e.__traceback__)
         if tb:
