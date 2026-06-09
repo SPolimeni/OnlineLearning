@@ -660,7 +660,18 @@ class MPC:
 
             for i in range(0,self.n_out):
                 self.opti.subject_to(self.slack_y[i,:] >= 1e-8)
-                self.opti.subject_to(self.slack_y[i,:] <= 50) 
+                  
+                #self.opti.subject_to(self.slack_y[i,:] <= 50) #MOD_new1 metto vincoli ad hoc per variabili slack
+                
+                #MOD_new1 aggiunti i seguenti vincoli per slack_y
+                self.opti.subject_to(self.slack_y[0,:] <= 50/self.out_scale[0]) 
+                self.opti.subject_to(self.slack_y[1,:] <= 50/self.out_scale[1]) 
+                self.opti.subject_to(self.slack_y[2,:] <= 50/self.out_scale[2]) 
+                self.opti.subject_to(self.slack_y[0,:2] <= 5/self.out_scale[0]) 
+                self.opti.subject_to(self.slack_y[1,:2] <= 1/self.out_scale[1]) 
+                self.opti.subject_to(self.slack_y[2,:2] <= 3/self.out_scale[2])                
+                ##### 
+
                 self.opti.subject_to(self.slack_explo[i,:] >= 1e-6)
                 self.opti.subject_to(self.slack_explo[i,:] <= 1e1) 
 
@@ -746,7 +757,13 @@ class MPC:
             if self.Model=="BNNExp":
                 # self.opti.subject_to(self.J ==1*(gamma_pred_gas @(1/1000*self.Ts/3600 * self.Pb[0,:].T/COP)+
                 # gamma_pred_el @ (1/1000*self.Ts/3600 * self.Pb[1,:].T/1)+ gamma*(self.y[0,self.N-1] -T_ref*casadi.MX.ones((1, 1)))**2+ gamma_slack*casadi.sum1(casadi.sum2(self.s))) + gamma_exp@self.slack_explo*self.flag )
-                self.opti.subject_to(self.J ==gamma_pred_gas @(1/1000*self.Ts/3600 * self.Pb[0,:].T/COP)+gamma_pred_el @ (1/1000*self.Ts/3600 * self.Pb[1,:].T/eff_EB)+ gamma*(self.y[0,self.N-1] -T_ref*casadi.MX.ones((1, 1)))**2+ gamma_slack[0]*casadi.sum1(self.slack_y[0,:]) + gamma_slack[1]*casadi.sum1(self.slack_y[1,:]) + gamma_slack[2]*casadi.sum1(self.slack_y[2,:]) + gamma_exp@self.slack_explo@np.ones((self.N, 1))*self.flag )
+                
+                #MOD_new1 commento la seguente funzione di costo e ne inserisco un'altra sotto
+                #self.opti.subject_to(self.J ==gamma_pred_gas @(1/1000*self.Ts/3600 * self.Pb[0,:].T/COP)+gamma_pred_el @ (1/1000*self.Ts/3600 * self.Pb[1,:].T/eff_EB)+ gamma*(self.y[0,self.N-1] -T_ref*casadi.MX.ones((1, 1)))**2+ gamma_slack[0]*casadi.sum1(self.slack_y[0,:]) + gamma_slack[1]*casadi.sum1(self.slack_y[1,:]) + gamma_slack[2]*casadi.sum1(self.slack_y[2,:]) + gamma_exp@self.slack_explo@np.ones((self.N, 1))*self.flag )
+                
+                #MOD_new1 aggiunta funzione costo dove peso quadraticamente slack_y e in modo diverso lungo l'orizzonte
+                self.opti.subject_to(self.J ==gamma_pred_gas @(1/1000*self.Ts/3600 * self.Pb[0,:].T/COP)+gamma_pred_el @ (1/1000*self.Ts/3600 * self.Pb[1,:].T/eff_EB)+ gamma*(self.y[0,self.N-1] -T_ref*casadi.MX.ones((1, 1)))**2+ gamma_slack[0]*self.slack_y[0,:4]@self.slack_y[0,:4].T + gamma_slack[1]*self.slack_y[1,:4]@self.slack_y[1,:4].T+ gamma_slack[1]*self.slack_y[2,:4]@self.slack_y[2,:4].T + 1e-3*(gamma_slack[0]*self.slack_y[0,4:]@self.slack_y[0,4:].T + gamma_slack[1]*self.slack_y[1,4:]@self.slack_y[1,4:].T + gamma_slack[2]*self.slack_y[2,4:]@self.slack_y[2,4:].T) + gamma_exp@self.slack_explo@np.ones((self.N, 1))*self.flag )
+          
             else:
                 self.opti.subject_to(self.J ==gamma_pred_gas @(1/1000*self.Ts/3600 * self.Pb[0,:].T/COP)+gamma_pred_el @ (1/1000*self.Ts/3600 * self.Pb[1,:].T/eff_EB)+ gamma*(self.y[0,self.N-1] -T_ref*casadi.MX.ones((1, 1)))**2+casadi.sum1(self.T_slack)*alpha_slack)
         
@@ -756,6 +773,7 @@ class MPC:
         Potenze = self.Potenze
         #Potenze = np.transpose(Potenze)
         c_el = self.c_el
+        sol_feas = 0  #MOD_new1 aggiungo questa variabile per salvare stato feasibility
         
         
         N=self.N #prediction horizon
@@ -836,6 +854,7 @@ class MPC:
             try:
                 sol = self.opti.solve()
                 print('*** Problem solved ***')
+                sol_feas = 1 #MOD_new1 aggiunto per salvare stato feasibility
                 # Extract the optimal control action
                 u_opt = sol.value(self.u[:, 0])
                 # Other variables
@@ -874,6 +893,7 @@ class MPC:
                     }
                     self.opti.solver('ipopt', prob_opts, ip_opts)
                     sol = self.opti.solve()
+                    sol_feas = 2  #MOD_new1 aggiunto per salvare stato feasibility
                     print('*** Problem solved on second attempt ***')
                     u_opt = sol.value(self.u[:, 0])
                     u_pred = sol.value(self.u)
@@ -891,13 +911,16 @@ class MPC:
                     y_nnarx = sol.value(self.y_nnarx)
                 except Exception as ex2:
                     print('*** Problem not solved  -  Takes last Feasible Solution!***')
+                    sol_feas = 3  #MOD_new1 aggiunto per salvare stato feasibility
                     fallback_u_pred = self.u_prec.copy()
                     fallback_u_pred[0:4, 0] = self.Potenze[:, self.t] + self.P_Shift_mpc1
                     u_opt = fallback_u_pred[:,0]
                     u_pred = fallback_u_pred
                     y_pred = self.y_prec
+
                     slack = np.zeros([n_slack,1])
                     slack_explo = np.zeros([self.n_out, self.N]) if self.Model == 'BNNExp' else 0
+
                     Pb_pred=self.Pb_prec
                     J_pred = self.J_prec
                     y_nnarx=self.y_prec
@@ -913,7 +936,7 @@ class MPC:
         end_time=time.time()
         computation_time=end_time-start_time
 
-        return  u_opt,slack,y_nnarx,computation_time,sigma_pred, slack_explo
+        return  u_opt,slack,y_nnarx,computation_time,sigma_pred, slack_explo, sol_feas  #MOD_new1 aggiunto sol_feas agli output
 
     def simulate_dynamics(self, k, initial_state, input_vector, A, Bu, Bx, C, steps, weights, n_states, ground_truth,theta):
         n_out = self.n_out
