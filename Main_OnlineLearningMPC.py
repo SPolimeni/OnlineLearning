@@ -30,6 +30,7 @@ def AuxiliaryParameters(Params):
     controller.s_out                = np.zeros([Params["n_out"],controller.num_steps]) if controller.Param["Model"] == 'BNNExp' else np.zeros([Params["n_slack"],controller.num_steps])
     controller.final_cost           = np.zeros([controller.num_steps])
     controller.computation_time     = np.zeros([controller.num_steps])
+    controller.sol_feas             = np.zeros([controller.num_steps])  #MOD_new1 - aggiungo array per salvare se problema feasible    
     controller.time_points          = np.arange(0, controller.total_time + 1, controller.time_step)[:controller.num_steps]
 
 def log_exception(msg):
@@ -215,16 +216,16 @@ def MPC_solve():
         slack_tol=1e-3 # TUNING PARAMETER
         ### Compute the control law every 15 minutes ###
 
-        controller.u_control, controller.slack, controller.y_nnarx, controller.computation_time[k], controller.sigma_current, controller.slack_explo= controller.mpc_controller(
-            k, controller.Param["T_C0"], controller.y_out, controller.u_out, controller.y_rnn_out,flag)
+        controller.u_control, controller.slack, controller.y_nnarx, controller.computation_time[k], controller.sigma_current, controller.slack_explo, controller.sol_feas[k]= controller.mpc_controller(
+            k, controller.Param["T_C0"], controller.y_out, controller.u_out, controller.y_rnn_out,flag) #MOD_new1 aggiunto controller.sol_feas[k] agli output di mpc_controller
         if np.any(controller.slack_explo <= slack_tol): # TUNING, TO CHECK
             print("exploration ON")
 
         else:
             flag = 0
             print(" exploration OFF")
-            controller.u_control, controller.slack, controller.y_nnarx, controller.computation_time[k],controller.sigma_current, controller.slack_explo= controller.mpc_controller(
-            k, controller.Param["T_C0"], controller.y_out, controller.u_out, controller.y_rnn_out,flag)
+            controller.u_control, controller.slack, controller.y_nnarx, controller.computation_time[k],controller.sigma_current, controller.slack_explo, controller.sol_feas[k]= controller.mpc_controller(
+            k, controller.Param["T_C0"], controller.y_out, controller.u_out, controller.y_rnn_out,flag) #MOD_new1 aggiunto controller.sol_feas[k] agli output di mpc_controller
         
         controller.exploration[0,k] = flag   #MODIFIED
         sigma_arr = np.asarray(controller.sigma_current)
@@ -339,7 +340,7 @@ if __name__ == "__main__":
         "COP"               :0.8,   #MODIFIED
         "eff_EB"            :0.8,   #MODIFIED
         "gamma_exp0"        :5,     #MODIFIED
-        "gamma_slack0"      :5*1e2,   #MODIFIED
+        "gamma_slack0"      :5*1e3,   #MODIFIED #MOD_new1 aumentato da 5*1e2 a 5*1e3 visto che le slack sono ora pesate al quadrato
         "alpha_slack0"      :100,   #MODIFIED
         "nnarx_mat"         :os.path.join('NNmodels','net_1020.mat'),  #TUNING -DA VERIFICARE!!!
         "c_el"              :np.genfromtxt('20250501_20250501_MGP_PrezziZonali_Nord.csv', delimiter=';', usecols=(2), skip_header=2),
@@ -372,9 +373,9 @@ if __name__ == "__main__":
     Opts['Debug'] = parser.parse_args().Debug
     args = parser.parse_args()
     Param["Model"] = args.Model
-
-    # Opts['Debug']   = True
-    # Param['Model']  = 'BNNExp'
+    
+     #Opts['Debug']   = True
+    #Param['Model']  = 'BNNExp'
 
     # Initizialization of MPC
     controller              = MPC(Param)
