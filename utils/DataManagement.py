@@ -41,6 +41,7 @@ def SaveAggregatedData(controller, t_step):
     save_col(controller.exploration,    f'exploration_{InitialDate}.csv')
     save_scalar(controller.final_cost,         f'final_cost_{InitialDate}.csv')
     save_scalar(controller.computation_time,   f'computational_time_{InitialDate}.csv')
+    save_scalar(controller.sol_feas,   f'sol_feas{InitialDate}.csv') #MOD_new1 aggiunta questa riga per salvare sol_feas 
 
     # CSV: parametri di configurazione (scritto solo al primo timestep)
     params_csv_path = os.path.join(folder_name, f'config_{InitialDate}.csv')
