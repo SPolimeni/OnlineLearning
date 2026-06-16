@@ -341,7 +341,7 @@ if __name__ == "__main__":
         "eff_EB"            :0.8,   #MODIFIED
         "gamma_exp0"        :5,     #MODIFIED
         "gamma_slack0"      :5*1e3,   #MODIFIED #MOD_new1 aumentato da 5*1e2 a 5*1e3 visto che le slack sono ora pesate al quadrato
-        "alpha_slack0"      :100,   #MODIFIED
+        "alpha_slack0"      :5*1e3,   #MODIFIED
         "nnarx_mat"         :os.path.join('NNmodels','net_1020.mat'),  #TUNING -DA VERIFICARE!!!
         "c_el"              :np.genfromtxt('20250501_20250501_MGP_PrezziZonali_Nord.csv', delimiter=';', usecols=(2), skip_header=2),
         "Potenza"           :np.genfromtxt('DHN_ground_truth_shifted.csv', delimiter=',', usecols=(3,4,5,6), skip_header=28),#potenza all'istante k
@@ -350,7 +350,7 @@ if __name__ == "__main__":
         "P_Shift_mpc2"      :0,  #MODIFIED          
         "P_Shift_mpc3"      :0,  #MODIFIED          
         "P_Shift_mpc4"      :0,  #MODIFIED                    
-        "Model"             :'BNNExp',
+        "Model"             :'GP',
         "T_C0"              :4, #istante in cui inizio ad applicare la legge di controllo
         "n_slack"           :1,
 
@@ -360,7 +360,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--Model",
         type=str,
-        default='BNNExp',
+        default='GP',
         help="Set the model type: 'NNARX', 'GP', or 'BNN' or 'BNNExp' or 'Benchmark'",
     )
     parser.add_argument(
@@ -374,8 +374,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
     Param["Model"] = args.Model
     
-     #Opts['Debug']   = True
-    #Param['Model']  = 'BNNExp'
+    Opts['Debug']   = True
+    Param['Model']  = 'GP'
 
     # Initizialization of MPC
     controller              = MPC(Param)
