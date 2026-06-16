@@ -765,7 +765,7 @@ class MPC:
                 self.opti.subject_to(self.J ==gamma_pred_gas @(1/1000*self.Ts/3600 * self.Pb[0,:].T/COP)+gamma_pred_el @ (1/1000*self.Ts/3600 * self.Pb[1,:].T/eff_EB)+ gamma*(self.y[0,self.N-1] -T_ref*casadi.MX.ones((1, 1)))**2+ gamma_slack[0]*self.slack_y[0,:4]@self.slack_y[0,:4].T + gamma_slack[1]*self.slack_y[1,:4]@self.slack_y[1,:4].T+ gamma_slack[1]*self.slack_y[2,:4]@self.slack_y[2,:4].T + 1e-3*(gamma_slack[0]*self.slack_y[0,4:]@self.slack_y[0,4:].T + gamma_slack[1]*self.slack_y[1,4:]@self.slack_y[1,4:].T + gamma_slack[2]*self.slack_y[2,4:]@self.slack_y[2,4:].T) + gamma_exp@self.slack_explo@np.ones((self.N, 1))*self.flag )
           
             else:
-                self.opti.subject_to(self.J ==gamma_pred_gas @(1/1000*self.Ts/3600 * self.Pb[0,:].T/COP)+gamma_pred_el @ (1/1000*self.Ts/3600 * self.Pb[1,:].T/eff_EB)+ gamma*(self.y[0,self.N-1] -T_ref*casadi.MX.ones((1, 1)))**2+casadi.sum1(self.T_slack)*alpha_slack)
+                self.opti.subject_to(self.J ==gamma_pred_gas @(1/1000*self.Ts/3600 * self.Pb[0,:].T/COP)+gamma_pred_el @ (1/1000*self.Ts/3600 * self.Pb[1,:].T/eff_EB)+ gamma*(self.y[0,self.N-1] -T_ref*casadi.MX.ones((1, 1)))**2 + self.T_slack@self.T_slack.T*alpha_slack)
         
     def mpc_controller(self, t,  T_C0, xk, uk, y_rnn,flag):
         start_time = time.time()
