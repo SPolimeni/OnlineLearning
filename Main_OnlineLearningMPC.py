@@ -374,8 +374,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
     Param["Model"] = args.Model
     
-    Opts['Debug']   = True
-    Param['Model']  = 'GP'
+    # Opts['Debug']   = True
+    # Param['Model']  = 'GP'
 
     # Initizialization of MPC
     controller              = MPC(Param)
