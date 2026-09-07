@@ -1,3 +1,10 @@
+"""Runtime entry point for the thermal MPC controller.
+
+This module orchestrates the controller lifecycle, reads the current system state,
+updates the model-based optimization loop, and either sends setpoints to the live
+plant or feeds the FMU-based simulation path during debug execution.
+"""
+
 import numpy as np
 import csv
 import argparse
@@ -14,11 +21,24 @@ from utils.DataManagement               import SaveAggregatedData
 import os
 import platform
 
+REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(REPO_ROOT, 'utils', 'data')
+
+
+def data_file(filename):
+    return os.path.join(DATA_DIR, filename)
+
+
 if platform.system() == "Windows":
     from pyfmi import load_fmu
 
 
 def AuxiliaryParameters(Params):
+    """Allocate the runtime arrays used to store predictions, states, and costs.
+
+    These arrays are attached to the controller instance and represent the
+    historical state of the control loop across the simulation horizon.
+    """
     controller.theta_history        = np.zeros([controller.num_steps, Params["n_x"], Params["n_out"]])  #MODIFIED
     controller.sigma                = np.zeros([Params["n_out"], controller.num_steps])  #MODIFIED
     controller.exploration          = np.zeros((1, controller.num_steps))
@@ -34,7 +54,11 @@ def AuxiliaryParameters(Params):
     controller.time_points          = np.arange(0, controller.total_time + 1, controller.time_step)[:controller.num_steps]
 
 def log_exception(msg):
-    """Log exception message to exceptions log file."""
+    """Persist runtime exceptions in the repository log directory.
+
+    This keeps operational errors visible even when the application is running in
+    a non-interactive or industrial deployment context.
+    """
     LogsFolder = os.path.join(os.getcwd(), 'LogsFolder')
     os.makedirs(LogsFolder, exist_ok=True)
     log_file = os.path.join(LogsFolder, 'Exceptions.log')
@@ -42,6 +66,7 @@ def log_exception(msg):
         f.write(f"{datetime.now()}: {msg}\n")
 
 def ReadStatus():
+    """Read the most recent state from either the live plant or the debug simulator."""
     if controller.Opts['Debug']:
         TdeliveryMeas = [71.06958, 70.96986, 71.104965, 71.12856]
         TreturnMeas   = [60.12344, 60.224037, 60.187595, 60.183292]
@@ -79,6 +104,7 @@ def ReadStatus():
             print(msg)
 
 def SetPointsToDERTF(Solved=True):
+    """Write the computed setpoints to the target system using the OPC UA interface."""
 
     try: 
 
@@ -156,6 +182,7 @@ def SetPointsToDERTF(Solved=True):
 
 
 def SetPointsToFMU():
+    """Send the generated control actions to the FMU simulation and capture the outputs."""
     k    = controller.t_step - 1  # t_step already incremented at this point
     Ts   = controller.time_step
     T_C0 = controller.Param["T_C0"]
@@ -185,6 +212,12 @@ def SetPointsToFMU():
 
 
 def MPC_solve():
+    """Run one controller cycle: read state, update model, solve MPC, and store outputs.
+
+    This is the heart of the receding-horizon loop. Each call reuses the latest
+    measurements and the best-known prediction model to produce the next control
+    action.
+    """
 
     k = copy.deepcopy(controller.t_step)
 
@@ -343,8 +376,8 @@ if __name__ == "__main__":
         "gamma_slack0"      :5*1e3,   #MODIFIED #MOD_new1 aumentato da 5*1e2 a 5*1e3 visto che le slack sono ora pesate al quadrato
         "alpha_slack0"      :5*1e3,   #MODIFIED
         "nnarx_mat"         :os.path.join('NNmodels','net_1020.mat'),  #TUNING -DA VERIFICARE!!!
-        "c_el"              :np.genfromtxt('20250501_20250501_MGP_PrezziZonali_Nord.csv', delimiter=';', usecols=(2), skip_header=2),
-        "Potenza"           :np.genfromtxt('DHN_ground_truth_shifted.csv', delimiter=',', usecols=(3,4,5,6), skip_header=28),#potenza all'istante k
+        "c_el"              :np.genfromtxt(data_file('20250501_20250501_MGP_PrezziZonali_Nord.csv'), delimiter=';', usecols=(2), skip_header=2),
+        "Potenza"           :np.genfromtxt(data_file('DHN_ground_truth_shifted.csv'), delimiter=',', usecols=(3,4,5,6), skip_header=28),#potenza all'istante k
         "P_Shift"           :5000, 
         "P_Shift_mpc1"      :0,     #MODIFIED  
         "P_Shift_mpc2"      :0,  #MODIFIED          

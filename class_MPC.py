@@ -1,3 +1,11 @@
+"""Core MPC implementation for the thermal-control application.
+
+This module holds the controller state, model-loading logic, optimization setup,
+and the receding-horizon control cycle. The class is designed around a custom
+combination of model predictions, FMU-based simulation, and neural-network-based
+state estimation.
+"""
+
 import gpytorch
 import torch
 
@@ -10,7 +18,16 @@ import time
 
 
 class MPC:
+    """Model-predictive controller for the thermal energy system.
+
+    The controller loads the neural model, stores the previous optimal trajectory,
+    and repeatedly solves a constrained optimization problem. The first control
+    action from the optimized horizon is applied to the plant or simulation model.
+    """
+
     class GPRegressionModel(gpytorch.models.ExactGP):
+        """Small GP helper used for model-error correction patterns in the code."""
+
         def __init__(self, train_x, train_y, likelihood):
             super().__init__(train_x, train_y, likelihood)
             self.mean_module = gpytorch.means.ConstantMean()
@@ -27,11 +44,18 @@ class MPC:
             covar_x = self.covar_module(x)
             return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
 
-    def __init__(self,Param):
+    def __init__(self, Param: dict):
+        """Initialize controller parameters, model data, and optimization state.
+
+        Parameters are passed as a single dictionary from the runtime entry point.
+        The constructor loads model metadata and initializes the prior predictions,
+        costs, and control buffers used in the receding-horizon loop.
+        """
         ### from param takes the default parameters
-        #Blocking Strategy
+        # Blocking strategy: parameters are kept in a single dictionary and attached
+        # to the controller instance to preserve the current runtime contract.
         print("IN!!!!")
-        self.Nb=Param["Nb"]
+        self.Nb = Param["Nb"]
     
         self.ore_tot = Param["tot_hours"]
         self.total_time = self.ore_tot * 3600
@@ -151,14 +175,21 @@ class MPC:
         # self.Pb  = self.opti.variable(2, self.N)
     
     def ensure2D(self, x: np.ndarray):
+        """Return a column-oriented 2D array for arrays that are only 1D."""
         if x.ndim == 1:
             return np.expand_dims(x, axis=1)
         return x
 
     def np2torch(self, x):
+        """Convert NumPy data into a PyTorch tensor in the float format used by the model code."""
         return torch.from_numpy(np.asarray(x)).float()
 
-    def gaussian_process(self,k,ys,y_mpc,input,u_mpc,ground_truth):
+    def gaussian_process(self, k, ys, y_mpc, input, u_mpc, ground_truth):
+        """Apply the GP-based correction pattern used when the controller operates in GP mode.
+
+        This helper is part of the prediction layer and estimates how observed
+        errors evolve around the current state values.
+        """
         ### Parameters ###
         h=3
         window_size=60
@@ -594,6 +625,7 @@ class MPC:
                    
         return y_final
     def SetOptimizationVariables(self):
+        """Create the CasADi optimization variables for the receding-horizon problem."""
          ### MPC optimization Variables ###
         self.opti = casadi.Opti()
         self.u = self.opti.variable(self.n_inp, self.n_uopt)
@@ -611,6 +643,11 @@ class MPC:
             self.T_slack = self.opti.variable(1, self.N)
 
     def SetConstraints(self):
+        """Add temperature, flow, power, and dynamic constraints to the optimization problem.
+
+        These constraints preserve the operational envelope of the thermal system
+        while the controller searches for a feasible action sequence.
+        """
          ### Constraints ###
         
         if self.Model == 'Benchmark':
@@ -726,48 +763,66 @@ class MPC:
         self.opti.subject_to(self.Pb_max_eb >= self.Pb[1,:]) 
 
     def SetCostFunction(self):
+        """Define the objective used by the MPC controller.
+
+        The cost balances energy cost, thermal tracking, and slack penalties while
+        keeping the model output within the controlled operating envelope.
+        """
         ### Cost Function  ### 
                 
-            gamma = self.gamma
-            T_ref = self.T_ref 
-            c_gas = self.c_gas
-            COP = self.COP
-            eff_EB = self.eff_EB
-            gamma_exp0 = self.gamma_exp0
-            gamma_slack0 = self.gamma_slack0
-            alpha_slack0 = self.alpha_slack0
-            gamma_pred_gas =c_gas*casadi.DM.ones(1,self.N)
-            r=int(np.floor(self.t/3)) 
-            #gamma_pred_el =self.c_el[r,0]/1000*casadi.DM.ones(1,self.N) #$/KWh
+        gamma = self.gamma
+        T_ref = self.T_ref 
+        c_gas = self.c_gas
+        COP = self.COP
+        eff_EB = self.eff_EB
+        gamma_exp0 = self.gamma_exp0
+        gamma_slack0 = self.gamma_slack0
+        alpha_slack0 = self.alpha_slack0
+        gamma_pred_gas =c_gas*casadi.DM.ones(1,self.N)
+        r=int(np.floor(self.t/3)) 
+        #gamma_pred_el =self.c_el[r,0]/1000*casadi.DM.ones(1,self.N) #$/KWh
 
-            gamma_pred_el = np.zeros((self.N,1))    #MODIFIED
-            for i in range(self.N):
-                idx = int(np.floor((self.t+i) * len(self.c_el) / self.num_steps))
-                idx = min(idx, len(self.c_el)-1)
-                gamma_pred_el[i] = self.c_el[idx]/1000 #c_el[idx] ALB come si vede dai file plot e dai codici test, i prezzi devono essere /1000, così ottimizzazione sembra più sensata
-            gamma_pred_el = gamma_pred_el.T
+        gamma_pred_el = np.zeros((self.N,1))    #MODIFIED
+        for i in range(self.N):
+            idx = int(np.floor((self.t+i) * len(self.c_el) / self.num_steps))
+            idx = min(idx, len(self.c_el)-1)
+            gamma_pred_el[i] = self.c_el[idx]/1000 #c_el[idx] ALB come si vede dai file plot e dai codici test, i prezzi devono essere /1000, così ottimizzazione sembra più sensata
+        gamma_pred_el = gamma_pred_el.T
 
-            alpha_slack = alpha_slack0*casadi.MX.ones((1, self.n_slack))  #TUNING PARAMETER
-            
-            gamma_exp=gamma_exp0*np.ones((1, self.n_out)) #TUNING PARAMETER
-            
-            #gamma_slack=1000 #TUNING PARAMETER
-            gamma_slack = gamma_slack0*np.array([self.out_scale[0], self.out_scale[1], self.out_scale[2]]) #MODIFIED
-
-            if self.Model=="BNNExp":
-                # self.opti.subject_to(self.J ==1*(gamma_pred_gas @(1/1000*self.Ts/3600 * self.Pb[0,:].T/COP)+
-                # gamma_pred_el @ (1/1000*self.Ts/3600 * self.Pb[1,:].T/1)+ gamma*(self.y[0,self.N-1] -T_ref*casadi.MX.ones((1, 1)))**2+ gamma_slack*casadi.sum1(casadi.sum2(self.s))) + gamma_exp@self.slack_explo*self.flag )
-                
-                #MOD_new1 commento la seguente funzione di costo e ne inserisco un'altra sotto
-                #self.opti.subject_to(self.J ==gamma_pred_gas @(1/1000*self.Ts/3600 * self.Pb[0,:].T/COP)+gamma_pred_el @ (1/1000*self.Ts/3600 * self.Pb[1,:].T/eff_EB)+ gamma*(self.y[0,self.N-1] -T_ref*casadi.MX.ones((1, 1)))**2+ gamma_slack[0]*casadi.sum1(self.slack_y[0,:]) + gamma_slack[1]*casadi.sum1(self.slack_y[1,:]) + gamma_slack[2]*casadi.sum1(self.slack_y[2,:]) + gamma_exp@self.slack_explo@np.ones((self.N, 1))*self.flag )
-                
-                #MOD_new1 aggiunta funzione costo dove peso quadraticamente slack_y e in modo diverso lungo l'orizzonte
-                self.opti.subject_to(self.J ==gamma_pred_gas @(1/1000*self.Ts/3600 * self.Pb[0,:].T/COP)+gamma_pred_el @ (1/1000*self.Ts/3600 * self.Pb[1,:].T/eff_EB)+ gamma*(self.y[0,self.N-1] -T_ref*casadi.MX.ones((1, 1)))**2+ gamma_slack[0]*self.slack_y[0,:4]@self.slack_y[0,:4].T + gamma_slack[1]*self.slack_y[1,:4]@self.slack_y[1,:4].T+ gamma_slack[1]*self.slack_y[2,:4]@self.slack_y[2,:4].T + 1e-3*(gamma_slack[0]*self.slack_y[0,4:]@self.slack_y[0,4:].T + gamma_slack[1]*self.slack_y[1,4:]@self.slack_y[1,4:].T + gamma_slack[2]*self.slack_y[2,4:]@self.slack_y[2,4:].T) + gamma_exp@self.slack_explo@np.ones((self.N, 1))*self.flag )
-          
-            else:
-                self.opti.subject_to(self.J ==gamma_pred_gas @(1/1000*self.Ts/3600 * self.Pb[0,:].T/COP)+gamma_pred_el @ (1/1000*self.Ts/3600 * self.Pb[1,:].T/eff_EB)+ gamma*(self.y[0,self.N-1] -T_ref*casadi.MX.ones((1, 1)))**2 + self.T_slack@self.T_slack.T*alpha_slack)
+        alpha_slack = alpha_slack0*casadi.MX.ones((1, self.n_slack))  #TUNING PARAMETER
         
-    def mpc_controller(self, t,  T_C0, xk, uk, y_rnn,flag):
+        gamma_exp=gamma_exp0*np.ones((1, self.n_out)) #TUNING PARAMETER
+        
+        #gamma_slack=1000 #TUNING PARAMETER
+        gamma_slack = gamma_slack0*np.array([self.out_scale[0], self.out_scale[1], self.out_scale[2]]) #MODIFIED
+
+        if self.Model=="BNNExp":
+            # self.opti.subject_to(self.J ==1*(gamma_pred_gas @(1/1000*self.Ts/3600 * self.Pb[0,:].T/COP)+
+            # gamma_pred_el @ (1/1000*self.Ts/3600 * self.Pb[1,:].T/1)+ gamma*(self.y[0,self.N-1] -T_ref*casadi.MX.ones((1, 1)))**2+ gamma_slack*casadi.sum1(casadi.sum2(self.s))) + gamma_exp@self.slack_explo*self.flag )
+            
+            #MOD_new1 commento la seguente funzione di costo e ne inserisco un'altra sotto
+            #self.opti.subject_to(self.J ==gamma_pred_gas @(1/1000*self.Ts/3600 * self.Pb[0,:].T/COP)+gamma_pred_el @ (1/1000*self.Ts/3600 * self.Pb[1,:].T/eff_EB)+ gamma*(self.y[0,self.N-1] -T_ref*casadi.MX.ones((1, 1)))**2+ gamma_slack[0]*casadi.sum1(self.slack_y[0,:]) + gamma_slack[1]*casadi.sum1(self.slack_y[1,:]) + gamma_slack[2]*casadi.sum1(self.slack_y[2,:]) + gamma_exp@self.slack_explo@np.ones((self.N, 1))*self.flag )
+            
+            #MOD_new1 aggiunta funzione costo dove peso quadraticamente slack_y e in modo diverso lungo l'orizzonte
+            self.opti.subject_to(self.J ==gamma_pred_gas @(1/1000*self.Ts/3600 * self.Pb[0,:].T/COP)+gamma_pred_el @ (1/1000*self.Ts/3600 * self.Pb[1,:].T/eff_EB)+ gamma*(self.y[0,self.N-1] -T_ref*casadi.MX.ones((1, 1)))**2+ gamma_slack[0]*self.slack_y[0,:4]@self.slack_y[0,:4].T + gamma_slack[1]*self.slack_y[1,:4]@self.slack_y[1,:4].T+ gamma_slack[1]*self.slack_y[2,:4]@self.slack_y[2,:4].T + 1e-3*(gamma_slack[0]*self.slack_y[0,4:]@self.slack_y[0,4:].T + gamma_slack[1]*self.slack_y[1,4:]@self.slack_y[1,4:].T + gamma_slack[2]*self.slack_y[2,4:]@self.slack_y[2,4:].T) + gamma_exp@self.slack_explo@np.ones((self.N, 1))*self.flag )
+        
+        else:
+            self.opti.subject_to(self.J ==gamma_pred_gas @(1/1000*self.Ts/3600 * self.Pb[0,:].T/COP)+gamma_pred_el @ (1/1000*self.Ts/3600 * self.Pb[1,:].T/eff_EB)+ gamma*(self.y[0,self.N-1] -T_ref*casadi.MX.ones((1, 1)))**2 + self.T_slack@self.T_slack.T*alpha_slack)
+    
+    def mpc_controller(self, t,  T_C0, xk, uk, y_rnn, flag):
+        """Solve the MPC optimization over the current prediction horizon.
+
+        Args:
+            t: current time step.
+            T_C0: time at which control is activated.
+            xk: measured state history used as the current system state.
+            uk: previous control inputs.
+            y_rnn: recent network-based predictions.
+            flag: exploration flag used by the controller.
+
+        Returns:
+            u_opt, slack, y_nnarx, computation_time, sigma_pred, slack_explo, sol_feas
+        """
         start_time = time.time()
         data = self.data
         Potenze = self.Potenze
@@ -938,7 +993,8 @@ class MPC:
 
         return  u_opt,slack,y_nnarx,computation_time,sigma_pred, slack_explo, sol_feas  #MOD_new1 aggiunto sol_feas agli output
 
-    def simulate_dynamics(self, k, initial_state, input_vector, A, Bu, Bx, C, steps, weights, n_states, ground_truth,theta):
+    def simulate_dynamics(self, k, initial_state, input_vector, A, Bu, Bx, C, steps, weights, n_states, ground_truth, theta):
+        """Advance the internal state-space representation over the prediction horizon."""
         n_out = self.n_out
         states = casadi.MX.zeros(n_states)
         outputs = casadi.MX.zeros((n_out, self.N))
@@ -958,7 +1014,13 @@ class MPC:
             sigma_k[k_sim,:]=sigma
         return states, outputs,sigma_k
 
-    def model_rnn(self,k,data,u,y_pred,u_prec,xk,uk,y,n_uopt,y_rnn,theta): 
+    def model_rnn(self, k, data, u, y_pred, u_prec, xk, uk, y, n_uopt, y_rnn, theta): 
+        """Build the NNARX state-space prediction used inside the optimization loop.
+
+        The method normalizes inputs, reconstructs the prior state vector, and
+        simulates the neural-network-based dynamics that are then used as the model
+        prediction of the thermal system.
+        """
 
         N=self.N
         horizon=3
@@ -1082,8 +1144,9 @@ class MPC:
                 
         return Y_pred,Y_RNN, Sigma
 
-    def activation_fun(self,input_vector, weights,state_vector,theta):
-        #3 layers totoali
+    def activation_fun(self, input_vector, weights, state_vector, theta):
+        """Evaluate the neural activation used inside the model-based dynamics simulation."""
+        # 3 layers total: recurrent dynamics plus hidden layers followed by the output projection.
         U0 = weights['U0'][0][0]
         b0 = weights['b0'][0][0]
         U0=U0
@@ -1128,12 +1191,18 @@ class MPC:
         
         return eta,sigma
 
-    def bayesian_correction(self,s,y_star,u):
-        #sigma_epsilon2 = 0.005 #0.01  #MODIFIED - USO SELF.SIGMA_EPSILON2
+    def bayesian_correction(self, s, y_star, u):
+        """Update the Bayesian last layer using recent data from the measured trajectory.
+
+        This is the mechanism that adapts the model when the controller is operating
+        with uncertainty-aware corrections.
+        """
+        # sigma_epsilon2 = 0.005 #0.01  #MODIFIED - USO SELF.SIGMA_EPSILON2
 
         L_prec=self.L_prev
         Q_prec=self.Q_prev
-    ####  bayesian correction ###
+        
+        ####  bayesian correction ###
 
         data =(self.data)
         layers= data['layers'][0, 0]  

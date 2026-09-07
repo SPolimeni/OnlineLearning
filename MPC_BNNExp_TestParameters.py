@@ -7,6 +7,15 @@ import matplotlib.pyplot as plt
 from scipy.io import loadmat
 from pyfmi import load_fmu
 import time
+import os
+
+REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(REPO_ROOT, 'utils', 'data')
+
+
+def data_file(filename):
+    return os.path.join(DATA_DIR, filename)
+
 
 def ensure2D(x: np.ndarray):
     if x.ndim == 1:
@@ -15,9 +24,9 @@ def ensure2D(x: np.ndarray):
 
 ############## Define parameters ##############
 data = loadmat('NNmodels/net_1020.mat') #ALB loadmat('net2.mat')
-Potenze = ensure2D(np.genfromtxt('DHN_ground_truth.csv', delimiter=',', usecols=(3,4,5,6), skip_header=28)) +4000 
+Potenze = ensure2D(np.genfromtxt(data_file('DHN_ground_truth.csv'), delimiter=',', usecols=(3,4,5,6), skip_header=28)) +4000 
 Potenze=np.transpose(Potenze)
-c_el=ensure2D(np.genfromtxt('20250501_20250501_MGP_PrezziZonali_Nord.csv', delimiter=';', usecols=(2), skip_header=2))     
+c_el=ensure2D(np.genfromtxt(data_file('20250501_20250501_MGP_PrezziZonali_Nord.csv'), delimiter=';', usecols=(2), skip_header=2))     
 # Scaler
 output_scaler=data['output_scaler']
 output_scaler=output_scaler[0,0]

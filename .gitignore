@@ -1,3 +1,20 @@
+# Local Python environments
 .venv/
+venv/
 env/
+
+# Python runtime caches
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Generated runtime outputs
 LogsFolder/
+archive/
+*.log
+
+# Local tool/cache files
+.ipynb_checkpoints/
+.DS_Store
+.github
