@@ -20,13 +20,7 @@ from utils.OPCUA.DERTF_SetPointsWriter  import OPCUA_SetPoint
 from utils.DataManagement               import SaveAggregatedData
 import os
 import platform
-
-REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(REPO_ROOT, 'utils', 'data')
-
-
-def data_file(filename):
-    return os.path.join(DATA_DIR, filename)
+from project_paths import data_file
 
 
 if platform.system() == "Windows":
@@ -334,6 +328,10 @@ def MPC_solve():
 
 if __name__ == "__main__":
 # Programma principale
+# This section configures the runtime mode and the controller parameters used to
+# initialize the MPC loop. The dictionary is intentionally kept as a single
+# configuration object to match the project’s current architecture and avoid a
+# wider refactor of the startup contract.
 
     Opts = {'Debug':False}
     
@@ -411,6 +409,10 @@ if __name__ == "__main__":
     # Param['Model']  = 'GP'
 
     # Initizialization of MPC
+    # The controller instance is created first, then the runtime state variables are
+    # attached to it. This matches the existing lifecycle: the object owns the
+    # optimization model, prediction buffers, and execution state used by the worker
+    # functions below.
     controller              = MPC(Param)
     controller.Opts         = Opts
     controller.Param        = Param
@@ -427,6 +429,9 @@ if __name__ == "__main__":
         controller.y_pred_out[:, 0] = controller.y_prec[:, 0]
     
     if not Opts['Debug']:
+        # Live execution is connected to the plant through OPC UA. The node map is
+        # defined explicitly here so the computed setpoints are written to the same
+        # industrial variables used in the real deployment environment.
         SetPointsWriter         = OPCUA_SetPoint()
         SetPointsWriter.DataMap = {
             'Power_HL1' : {'NodeID': 'ns=4;s=CO.FC_HL1_FT701L.r_PotenzaDesiderata',    'Value': None},
@@ -439,6 +444,9 @@ if __name__ == "__main__":
         controller.SetPointsWriter = SetPointsWriter
 
     if Opts['Debug']:
+        # In debug mode the loop is run against the FMU model instead of the live plant.
+        # The same control inputs and state variables are used, which makes the debug
+        # path a safe offline representation of the deployment workflow.
         controller.fmu = load_fmu('FMUs/DHN_MC_V3_FMU_EB_60.fmu')
         fmu_opts = controller.fmu.simulate_options()
         fmu_opts['CVode_options']['rtol'] = 1e-4
@@ -453,10 +461,14 @@ if __name__ == "__main__":
         controller.y_rnn_out[0, :] = controller.y_prec[:, 0]
 
     if Opts['Debug']:
+        # Debug execution runs the step loop synchronously for reproducibility and
+        # faster offline testing without the live scheduler.
         for k in range(0, controller.num_steps - 1):
             MPC_solve()
 
     else: 
+        # Production mode schedules the status read and the control update repeatedly,
+        # preserving the same control cadence as the deployed system.
         scheduler = BackgroundScheduler()
 
         scheduler.add_job(ReadStatus, 'interval', seconds= 10, next_run_time=datetime.now() + timedelta(seconds=2))

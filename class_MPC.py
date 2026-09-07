@@ -4,6 +4,19 @@ This module holds the controller state, model-loading logic, optimization setup,
 and the receding-horizon control cycle. The class is designed around a custom
 combination of model predictions, FMU-based simulation, and neural-network-based
 state estimation.
+
+Functional overview:
+- The controller is initialized from a configuration dictionary containing the
+  plant constraints, economic parameters, and model metadata.
+- At each control step it reads the current system state and reconstructs the
+  last input/output history used by the predictive model.
+- The NNARX/GP/BNN model is used to generate a prediction over the horizon and
+  the optimizer solves a constrained finite-horizon problem.
+- The first control action of the computed sequence is applied to the plant or the
+  debug FMU, while the complete optimized trajectory is kept as warm start for the
+  next step.
+- In the Bayesian variants, uncertainty-aware corrections are incorporated through
+  the last-layer update and uncertainty-dependent slack constraints.
 """
 
 import gpytorch
@@ -54,9 +67,14 @@ class MPC:
         ### from param takes the default parameters
         # Blocking strategy: parameters are kept in a single dictionary and attached
         # to the controller instance to preserve the current runtime contract.
+        # This keeps the code compatible with the current orchestration style without
+        # introducing a new configuration object or a wider validation layer.
         print("IN!!!!")
         self.Nb = Param["Nb"]
     
+        # The controller operates on a receding-horizon strategy: it solves a finite
+        # optimization problem over N steps, then applies only the first control action
+        # before repeating the cycle at the next time step.
         self.ore_tot = Param["tot_hours"]
         self.total_time = self.ore_tot * 3600
         self.time_step = 300
@@ -68,6 +86,8 @@ class MPC:
         self.n_slack=1
         
         ### import from Param
+        # These parameters define the thermal comfort/energy trade-off for the three
+        # controlled outputs: delivery temperature, return temperature, and mass flow.
         self.beta0_1 = Param["beta0_1"] # MODIFIED
         self.beta0_2 = Param["beta0_2"] # MODIFIED
         self.beta0_3 = Param["beta0_3"] # MODIFIED
@@ -109,10 +129,16 @@ class MPC:
         self.Pb_min_eb=Param["Pb_min_eb"]
         self.data=loadmat(Param["nnarx_mat"])
         self.c_el=self.ensure2D(Param["c_el"])
+        # Load the district-heating demand profile and add the current shift offset.
+        # The profile is stored as a time series and used as the known load input over
+        # the horizon; this is part of the prediction model, not a hard-coded plant signal.
         self.Potenze=Param["Potenza"].T+Param['P_Shift'] #potenza all'istante k
         self.Model=Param["Model"]
         self.T_C0=Param["T_C0"] #istante in cui inizio ad applicare la legge di controllo
         ### initial value MPC
+        # These values are the warm-start trajectory used at startup before the first
+        # optimization solve. They avoid a full cold start and provide a stable initial
+        # guess for the solver in the first receding-horizon iteration.
         self.J_prec=0
         y_pred=np.zeros([self.n_out,self.N])
         y_pred[0,:]=70.2690912858482
@@ -131,6 +157,10 @@ class MPC:
         self.Pb_prec = Pb_pred
         self.sigma_prec = 0.05 * np.ones((self.N, self.n_out))
         ### Buffer Gaussian Process ###
+        # The GP correction layer keeps a rolling history of residuals and inputs used
+        # to learn local deviations between the nominal NNARX prediction and the real
+        # measured thermal behavior. This history is intentionally bounded to avoid
+        # unbounded memory growth during long runs.
         self.gp_buffer = {
         "y_buffer_1": [],
         "y_buffer_2": [],
@@ -142,7 +172,9 @@ class MPC:
         self.y_gp= np.empty((self.num_steps + self.N, self.n_out), dtype=object)
 
         ### bayesian last layer ###
-
+        # The trained network stores the last-layer weights in the MATLAB structure.
+        # These are used to construct the Bayesian correction term around the mean
+        # prediction and provide uncertainty-aware control inputs in the advanced modes.
         layers= self.data['layers'][0, 0]  
         weight=layers['weights']
         weights=weight[0,0]
@@ -626,6 +658,10 @@ class MPC:
         return y_final
     def SetOptimizationVariables(self):
         """Create the CasADi optimization variables for the receding-horizon problem."""
+        # The optimization variables represent the sequence of future control actions
+        # and the corresponding predicted thermal trajectory over the whole horizon.
+        # Their shape is fixed intentionally because later parts of the MPC logic rely
+        # on their indexing and structure when building constraints and warm-starts.
          ### MPC optimization Variables ###
         self.opti = casadi.Opti()
         self.u = self.opti.variable(self.n_inp, self.n_uopt)
@@ -648,17 +684,30 @@ class MPC:
         These constraints preserve the operational envelope of the thermal system
         while the controller searches for a feasible action sequence.
         """
+        # Constraints are the operational envelope of the controller. They ensure that
+        # the optimizer stays inside the admissible domain of the district-heating
+        # system: temperature bounds, flow limits, power limits, and smoothness of the
+        # input sequence between adjacent control intervals.
+        # The policy is to keep the problem feasible while still allowing a meaningful
+        # economic trade-off between comfort and operating cost.
          ### Constraints ###
         
         if self.Model == 'Benchmark':
+            # Benchmark mode is a fixed-temperature operating point used for tests and
+            # comparisons; it does not follow the variable setpoint logic of the live model.
             self.opti.subject_to(self.u[4,:] == 72)
             self.opti.subject_to(self.u[5,:] == 72)
-        else: 
+        else:
+            # The generator and boiler outlet temperatures are bounded by the plant
+            # operational envelope. This keeps the predicted solution in realistic ranges.
             self.opti.subject_to(self.Ts_min_eb <= self.u[5,:])
             self.opti.subject_to(self.Ts_max_eb>= self.u[5,:])
             self.opti.subject_to(self.Ts_min_gb<= self.u[4,:])
             self.opti.subject_to(self.Ts_max_gb >= self.u[4,:])
 
+        # The first four control inputs represent the thermal power loads for the four
+        # plant branches. They are tied to the demand forecast through a shifted load
+        # profile along the horizon.
         if self.t > self.num_steps - 4:
             self.opti.subject_to(self.Potenze[:,self.t-2] + self.P_Shift_mpc1 == self.u[0:4, 0])
             self.opti.subject_to(self.Potenze[:,self.t-2+3]+ self.P_Shift_mpc2 == self.u[0:4, 1])
@@ -669,8 +718,10 @@ class MPC:
             self.opti.subject_to(self.Potenze[:,self.t+3]+ self.P_Shift_mpc2 == self.u[0:4, 1])
             self.opti.subject_to(self.Potenze[:,self.t+6]+ self.P_Shift_mpc3 == self.u[0:4, 2])
             self.opti.subject_to(self.Potenze[:,self.t+9]+ self.P_Shift_mpc4 == self.u[0:4, 3])
-        
-        # System dynamics constraint 
+
+        # The nonlinear model is used as the process equation inside the optimization.
+        # The predicted outputs y and the surrogate model output y_nnarx must match the
+        # recurrent dynamics generated by the NNARX/GP layer.
         y_N,output_rnn,sigma_est= self.model_rnn(self.t,self.data, self.u, self.y_prec,self.u_prec,self.xk,self.uk,self.y,self.N/self.Nb,self.y_rnn,self.theta)
         
         if self.Model=='GP':
@@ -681,19 +732,23 @@ class MPC:
             self.opti.subject_to(self.y_nnarx== output_rnn[:,0:self.N])
 
 
-        if self.Model== 'BNNExp': 
+        if self.Model== 'BNNExp':
+            # In the Bayesian version the variance term acts as an uncertainty band around
+            # the nominal prediction. Slack variables allow the optimizer to relax the
+            # constraints when the uncertainty becomes too large, while still preserving a
+            # feasible and stable solution.
             self.opti.subject_to((self.Ts_min_supply - self.out_bias[0])/self.out_scale[0] + self.beta[0]*(self.sigmaK[:,0]).T - self.slack_y[0,:] <= (self.y[0,:] - self.out_bias[0])/self.out_scale[0])
             self.opti.subject_to((self.Ts_max - self.out_bias[0])/self.out_scale[0] - self.beta[0]*(self.sigmaK[:,0]).T + self.slack_y[0,:] >= (self.y[0,:] - self.out_bias[0])/self.out_scale[0]) 
-      
+
             # Tr_min <= Tr <= Tr_max
             self.opti.subject_to((self.Tr_min - self.out_bias[1])/self.out_scale[1] + self.beta[1]*(self.sigmaK[:,1]).T - self.slack_y[1,:] <= (self.y[1,:] - self.out_bias[1])/self.out_scale[1])
-            self.opti.subject_to((self.Tr_max - self.out_bias[1])/self.out_scale[1] - self.beta[1]*(self.sigmaK[:,1]).T + self.slack_y[1,:] >= (self.y[1,:] - self.out_bias[1])/self.out_scale[1]) 
+            self.opti.subject_to((self.Tr_max - self.out_bias[1])/self.out_scale[1] - self.beta[1]*(self.sigmaK[:,1]).T + self.slack_y[1,:] >= (self.y[1,:] - self.out_bias[1])/self.out_scale[1])
 
             # q_min <= q <= q_max
             self.opti.subject_to((self.m_min - self.out_bias[2])/self.out_scale[2] + self.beta[2]*(self.sigmaK[:,2]).T - self.slack_y[2,:] <= (self.y[2,:] - self.out_bias[2])/self.out_scale[2])
-            self.opti.subject_to((self.m_max - self.out_bias[2])/self.out_scale[2] - self.beta[2]*(self.sigmaK[:,2]).T + self.slack_y[2,:] >= (self.y[2,:] - self.out_bias[2])/self.out_scale[2]) 
+            self.opti.subject_to((self.m_max - self.out_bias[2])/self.out_scale[2] - self.beta[2]*(self.sigmaK[:,2]).T + self.slack_y[2,:] >= (self.y[2,:] - self.out_bias[2])/self.out_scale[2])
 
-            self.opti.subject_to(self.sigmaK==sigma_est)  
+            self.opti.subject_to(self.sigmaK==sigma_est)
 
             for i in range(0,self.n_out):
                 self.opti.subject_to(self.slack_y[i,:] >= 1e-8)
@@ -717,14 +772,17 @@ class MPC:
                 self.opti.subject_to(self.beta[0]*(self.sigmaK[:,0]).T>=self.epsilon[0]-self.slack_explo[0,:]/self.out_scale[0])  
                 self.opti.subject_to(self.beta[1]*(self.sigmaK[:,1]).T>=self.epsilon[1]-self.slack_explo[1,:]/self.out_scale[1])    
                 self.opti.subject_to(self.beta[2]*(self.sigmaK[:,2]).T>=self.epsilon[2]-self.slack_explo[2,:]/self.out_scale[2])    
-        else: 
-            #self.opti.subject_to(self.Ts_min- self.s[0,:] <= self.y[0,:])#MODIFIED
-            self.opti.subject_to(self.Ts_max + self.T_slack >= self.y[0,:]) 
+        else:
+            # For the non-BNN models the safety constraints are imposed directly on the
+            # output trajectory: the target temperatures and flow range must remain inside
+            # the admissible operational band. A dedicated slack variable is used only for
+            # the supply-temperature lower bound to prevent overly aggressive feasibility
+            # losses when the forecast is uncertain.
+            self.opti.subject_to(self.Ts_max + self.T_slack >= self.y[0,:])
             self.opti.subject_to(self.Tr_min <= self.y[1,:])
-            self.opti.subject_to(self.Tr_max  >= self.y[1,:]) 
+            self.opti.subject_to(self.Tr_max  >= self.y[1,:])
             self.opti.subject_to(self.m_min<= self.y[2,:])
-            self.opti.subject_to(self.m_max >= self.y[2,:]) 
-            # Vincolo per temperatura minima mandata ultimo carico
+            self.opti.subject_to(self.m_max >= self.y[2,:])
             self.opti.subject_to(self.y[0,:] >= self.Ts_min_supply - self.T_slack) #MODIFIED
             self.opti.subject_to(self.T_slack >= 0)
             self.opti.subject_to(self.T_slack <= 20)
@@ -733,21 +791,26 @@ class MPC:
             for i in range(self.n_out):
                 self.opti.subject_to(self.slack_y[i,:] >= 1e-8)
 
-        # #Δu_min < Δu < Δu_max
+        # The last two inputs are outlet temperatures; they are limited to a small
+        # step variation with respect to the previous solution so the control action
+        # remains smooth and physically realistic from one optimization cycle to the next.
         delta = 5 #TUNING
-        val_prec = float(self.u_prec[5, 0])                       
-        val_correnti = self.u[5, 0:self.n_uopt-1]                          
+        val_prec = float(self.u_prec[5, 0])
+        val_correnti = self.u[5, 0:self.n_uopt-1]
         vect = casadi.horzcat(val_prec, val_correnti)
         self.opti.subject_to(-delta <= self.u[5,:] - vect)
         self.opti.subject_to( delta >= self.u[5,:] - vect)
-        
-        val_prec = float(self.u_prec[4, 0])                       
-        val_correnti = self.u[4, 0:self.n_uopt-1]                          
+
+        val_prec = float(self.u_prec[4, 0])
+        val_correnti = self.u[4, 0:self.n_uopt-1]
         vect = casadi.horzcat(val_prec, val_correnti)
         self.opti.subject_to(-delta <= self.u[4,:] - vect)
         self.opti.subject_to( delta >= self.u[4,:] - vect)
 
         cp=4186
+        # Power balance equations link the predicted outputs and the control actions to
+        # the thermal power generated by the heating units. These equations are used to
+        # keep the plant power within the admissible operating envelope.
         for j in range(0,self.N):
             ii = min(np.floor(j/self.Nb), self.N/self.Nb-1)
             if j==0:
@@ -758,9 +821,9 @@ class MPC:
                 self.opti.subject_to( cp * casadi.minus(self.y[2,j-1],self.q_eb*casadi.DM.ones(1,1))* (self.u[4,ii]-self.y[1, j-1]) == self.Pb[0,j])
                 self.opti.subject_to( cp * self.q_eb*casadi.DM.ones(1,1)* (self.u[5,ii]-self.y[1,j-1]) == self.Pb[1,j])
         self.opti.subject_to(self.Pb_min <= self.Pb[0,:])
-        self.opti.subject_to(self.Pb_max >= self.Pb[0,:])   
+        self.opti.subject_to(self.Pb_max >= self.Pb[0,:])
         self.opti.subject_to(self.Pb_min_eb<= self.Pb[1,:])
-        self.opti.subject_to(self.Pb_max_eb >= self.Pb[1,:]) 
+        self.opti.subject_to(self.Pb_max_eb >= self.Pb[1,:])
 
     def SetCostFunction(self):
         """Define the objective used by the MPC controller.
@@ -768,8 +831,14 @@ class MPC:
         The cost balances energy cost, thermal tracking, and slack penalties while
         keeping the model output within the controlled operating envelope.
         """
+        # The objective function is the mechanism that trades off economic efficiency
+        # against comfort and feasibility: lower energy cost is desirable, but the
+        # controller must still respect thermal and hydraulic constraints and keep the
+        # output trajectory close to the reference conditions. The optimization is not
+        # purely economic; it also penalizes deviations from the desired delivery
+        # temperature and the use of large slack variables when constraints are relaxed.
         ### Cost Function  ### 
-                
+
         gamma = self.gamma
         T_ref = self.T_ref 
         c_gas = self.c_gas
@@ -823,30 +892,41 @@ class MPC:
         Returns:
             u_opt, slack, y_nnarx, computation_time, sigma_pred, slack_explo, sol_feas
         """
+        # This is the core of the control loop. At each time step it:
+        # 1) collects the current plant state and past inputs,
+        # 2) builds the optimization problem using the current model,
+        # 3) solves the finite-horizon control problem,
+        # 4) keeps only the first action and stores the warm-start state for the next step.
+        # The logic is intentionally left in a single method to preserve the existing
+        # runtime contract and project structure.
         start_time = time.time()
         data = self.data
         Potenze = self.Potenze
         #Potenze = np.transpose(Potenze)
         c_el = self.c_el
+        # This flag records whether the optimizer solved the problem directly,
+        # needed a relaxed retry, or had to fall back to the last feasible trajectory.
         sol_feas = 0  #MOD_new1 aggiungo questa variabile per salvare stato feasibility
-        
-        
+
+        # The controller solves a prediction problem over N steps and reduces the
+        # sequence to a smaller number of control updates using the block size Nb.
         N=self.N #prediction horizon
-    
-    
-        
         n_slack = self.n_slack
         n_inp = self.n_inp
         n_out = self.n_out
         n_uopt = int(self.N / self.Nb)
+
+        # Attach the current runtime data to the controller instance so the constraint
+        # and cost builders can access the correct state vector and input history.
         self.xk=xk
         self.uk=uk
         self.t=t
         self.y_rnn=y_rnn
         self.flag= flag
         self.SetOptimizationVariables()
-        
-            
+
+        # Before T_C0 the controller is still in startup mode: the optimization is not
+        # yet active, and the previous nominal action is reused to keep the loop stable.
         if t<T_C0:
             u_opt = self.u_prec[:,0]
             u_pred = self.u_prec
@@ -859,13 +939,16 @@ class MPC:
             sigma_pred = 0.05 * np.ones((self.N, self.n_out))
             slack_explo= np.zeros([n_out, N])
 
-
         else:
+            # Build the finite-horizon optimization problem using the latest measurements
+            # and model predictions. This is where the process constraints, system dynamics,
+            # and cost function are embedded in the CasADi problem.
             self.SetConstraints()
-
             self.SetCostFunction()
 
-            for i in range(n_inp) :
+            # Warm-start the solver from the previous feasible trajectory. This keeps the
+            # optimizer stable and reduces the time needed to converge to the next horizon.
+            for i in range(n_inp):
                 initial_guess = np.concatenate([self.u_prec[i, 1:n_uopt], [self.u_prec[i, -1]]])
                 self.opti.set_initial(self.u[i,:], initial_guess)
 
@@ -875,46 +958,48 @@ class MPC:
                 self.opti.set_initial(self.y_nnarx[i,:],  y_initial)
             for i in range(2):
                 Pb_initial = np.concatenate([self.Pb_prec[ i,1:], [self.Pb_prec[ i,-1]]])
-                self.opti.set_initial(self.Pb[i,:], Pb_initial)    
+                self.opti.set_initial(self.Pb[i,:], Pb_initial)
             self.opti.set_initial(self.J, self.J_prec)
+
             if self.Model == "BNNExp":
                 for i in range(self.n_out):
                     self.opti.set_initial(self.sigmaK[:,i], 0.05*np.ones([self.N,1]))
                 self.opti.set_initial(self.slack_explo, np.zeros([self.n_out,self.N]))  #MODIFY - TUNING PARAMETER
                 self.opti.set_initial(self.slack_y, np.zeros([self.n_out, self.N]))
             else:
-                self.opti.set_initial(self.slack_y, np.zeros([n_slack,1]))  
+                self.opti.set_initial(self.slack_y, np.zeros([n_slack,1]))
 
-
-            self.opti.minimize(self.J);                  
+            # Objective function is minimized over the horizon while respecting the current
+            # model constraints. The optimization uses IPOPT as the underlying solver.
+            self.opti.minimize(self.J)
             prob_opts = {
                 'expand': True,
                 'ipopt': {
-                    'print_level': 3,     # Disable printing
+                    'print_level': 3,
                 },
-                'print_time': False       # Do not print the timestamp
+                'print_time': False
             }
 
             # IPOPT settings  #MODIFY - TUNING PARAMETER
             ip_opts = {
-                'print_level': 3,           # Disable printing
-                'max_iter': int(1e4),       # Maximum iterations. Use int() to avoid float
-                'compl_inf_tol': 1e-5      # Desired threshold for the complementarity conditions
+                'print_level': 3,
+                'max_iter': int(1e4),
+                'compl_inf_tol': 1e-5
             }
 
             # Set the solver
             self.opti.solver('ipopt', prob_opts, ip_opts)
-            
-            # SOLVE THE FHOCP
+
+            # Solve the FHOCP. The first attempt is the nominal one, but if the solve fails
+            # the method relaxes the optimality tolerances and retries. If that still fails,
+            # the last known feasible input trajectory is used as a safe fallback.
             try:
                 sol = self.opti.solve()
                 print('*** Problem solved ***')
                 sol_feas = 1 #MOD_new1 aggiunto per salvare stato feasibility
-                # Extract the optimal control action
                 u_opt = sol.value(self.u[:, 0])
-                # Other variables
                 u_pred = sol.value(self.u)
-            
+
                 y_pred = sol.value(self.y)
                 if self.Model == 'BNNExp':
                     slack = sol.value(self.slack_y)
@@ -927,9 +1012,13 @@ class MPC:
                 Pb_pred=sol.value(self.Pb)
                 J_pred = sol.value(self.J)
                 y_nnarx=sol.value(self.y_nnarx)
+
             except Exception as ex:
                 print('*** Problem not solved  -  First IPOPT attempt failed, retrying with relaxed tolerances ***')
                 try:
+                    # The second attempt preserves the same formulation but relaxes the
+                    # solver tolerance so the optimizer can recover from a near-feasible
+                    # but numerically difficult step.
                     self.opti.minimize(0.01 * self.J)
                     prob_opts = {
                         'expand': True,
@@ -964,8 +1053,12 @@ class MPC:
                     Pb_pred = sol.value(self.Pb)
                     J_pred = sol.value(self.J)
                     y_nnarx = sol.value(self.y_nnarx)
+
                 except Exception as ex2:
                     print('*** Problem not solved  -  Takes last Feasible Solution!***')
+                    # This fallback keeps the system running even when the optimizer fails.
+                    # It reuses the last stable plan instead of producing a broken or
+                    # inconsistent control command.
                     sol_feas = 3  #MOD_new1 aggiunto per salvare stato feasibility
                     fallback_u_pred = self.u_prec.copy()
                     fallback_u_pred[0:4, 0] = self.Potenze[:, self.t] + self.P_Shift_mpc1
@@ -980,8 +1073,9 @@ class MPC:
                     J_pred = self.J_prec
                     y_nnarx=self.y_prec
                     sigma_pred = self.sigma_prec
-        
-        ### save prev values ###      
+
+        # Save the latest accepted optimization result so the next MPC call has a
+        # reliable warm start and a consistent notion of the previous horizon.
         self.J_prec=J_pred
         self.Pb_prec=Pb_pred
         self.y_prec=y_pred
@@ -1021,6 +1115,12 @@ class MPC:
         simulates the neural-network-based dynamics that are then used as the model
         prediction of the thermal system.
         """
+        # This routine is the bridge between the measured system trajectory and the
+        # optimization model embedded in CasADi. It reconstructs a state vector from
+        # the last few outputs and inputs, scales it to the NNARX training domain,
+        # and then iterates the recurrent dynamics over the prediction horizon.
+        # The result is a prediction of future temperatures and flows that can be used
+        # directly inside the MPC constraints and objective functions.
 
         N=self.N
         horizon=3
@@ -1031,6 +1131,10 @@ class MPC:
         n_states=horizon*(n_out+n_inp)
 
         ### State space model of NNarx: matrices definitions ##
+        # The recurrent state representation is built with a 3-step delay structure:
+        # it stores the most recent output and input history, then evolves the latent
+        # state through a linear dynamics template before the nonlinear NNARX update.
+        # This is a compact way to encode the temporal dependence of the thermal plant.
         _a = np.zeros((horizon, horizon))
         _a[range(0, horizon - 1), range(1, horizon)] = 1
         A = np.kron(_a, np.eye((n_inp + n_out)))
@@ -1105,6 +1209,9 @@ class MPC:
         initial_state[23,:] =(((uk[5,k-1]*q_eb+( xk[2,k-1] -q_eb*np.ones([1,1]))*uk[4,k-1])/xk[2,k-1])-inp_bias[4])/inp_scale[4]
         
         ### Output Normalization ###
+        # Measured and predicted outputs are normalized to the same scale used during
+        # training. This is essential because the learned NNARX/BNN model was trained on
+        # normalized signals, while the controller works in physical units.
         Y_pred=casadi.MX(n_out,N)
         Y_RNN=casadi.MX(n_out,N)
         ys=np.zeros([self.num_steps,n_out])
@@ -1115,6 +1222,9 @@ class MPC:
                 ground_truth[j,i]=(xk[i,j]-out_bias[i])/out_scale[i]
     
         ### NNARX Prediction ###
+        # We simulate the recurrent dynamics over the whole horizon using the current
+        # state estimate and the candidate control sequence. The function returns the
+        # predicted output trajectory together with the estimated uncertainty term.
         states,outputs,Sigma=self.simulate_dynamics(k,initial_state, U[:,:], A, Bu, Bx, C, N,weights,n_states,ground_truth,theta)
 
         if self.Model=='NNARX' or self.Model=='BNN' or self.Model=='BNNExp':
@@ -1146,6 +1256,10 @@ class MPC:
 
     def activation_fun(self, input_vector, weights, state_vector, theta):
         """Evaluate the neural activation used inside the model-based dynamics simulation."""
+        # The prediction model is built as a structured recurrent network: the hidden
+        # state is updated from the current state and inputs, then a nonlinear activation
+        # produces the output estimate. This is the core computational block used in the
+        # forward simulation of the NNARX model.
         # 3 layers total: recurrent dynamics plus hidden layers followed by the output projection.
         U0 = weights['U0'][0][0]
         b0 = weights['b0'][0][0]
@@ -1170,6 +1284,10 @@ class MPC:
         
     
         n_neurons=9
+        # The recurrent network uses two nonlinear hidden layers fed by the current
+        # plant state and the candidate input vector. The final feature map appends a
+        # constant term to construct the Bayesian last-layer basis used in the adaptive
+        # correction step.
         z1=np.matmul(np.transpose(U1[:,:]),state_vector)
         z2=np.matmul(np.transpose(W1[:,:]),input_vector.T) 
         z3=np.transpose(b1[:,:].reshape(n_neurons,))
@@ -1197,11 +1315,15 @@ class MPC:
         This is the mechanism that adapts the model when the controller is operating
         with uncertainty-aware corrections.
         """
+        # This routine updates the adaptive last layer of the model online, using the
+        # recent measured trajectory as a Bayesian correction set. In practice it keeps
+        # track of a recursively updated precision matrix and recalculates the model
+        # output layer, which is then used during the next optimization cycle.
         # sigma_epsilon2 = 0.005 #0.01  #MODIFIED - USO SELF.SIGMA_EPSILON2
 
         L_prec=self.L_prev
         Q_prec=self.Q_prev
-        
+
         ####  bayesian correction ###
 
         data =(self.data)

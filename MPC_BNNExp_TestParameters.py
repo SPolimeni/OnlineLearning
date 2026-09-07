@@ -8,13 +8,7 @@ from scipy.io import loadmat
 from pyfmi import load_fmu
 import time
 import os
-
-REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(REPO_ROOT, 'utils', 'data')
-
-
-def data_file(filename):
-    return os.path.join(DATA_DIR, filename)
+from project_paths import data_file
 
 
 def ensure2D(x: np.ndarray):

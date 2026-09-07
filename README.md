@@ -65,9 +65,22 @@ The repository currently contains both source code and research/runtime artifact
 - [archive](archive): legacy or non-primary project artifacts separated during cleanup
 - [env](env): local environment/dependency directory, typically not intended for public source control
 
+## Prerequisites
+
+This project is a research/industrial control application and depends on a specific scientific stack. Before running it, make sure the environment includes the packages listed in [requirements.txt](requirements.txt), especially:
+
+- Python 3.10+
+- NumPy, SciPy
+- CasADi
+- PyTorch / GPyTorch (depending on the model path)
+- pyFMI for FMU-based simulation
+- OPC UA / InfluxDB support if using the live-plant path
+
+The repository also assumes a local Windows-oriented setup for the industrial deployment path.
+
 ## Installation
 
-The repository includes a minimal installation flow in [docs/Istruzioni_installazione.txt](docs/Istruzioni_installazione.txt):
+Use the following minimal setup flow:
 
 ```powershell
 py -m venv .venv
@@ -75,7 +88,7 @@ py -m venv .venv
 pip install -r requirements.txt
 ```
 
-This is the primary installation instruction currently present in the repository. The requirements file is [requirements.txt](requirements.txt).
+Further installation notes are available in [docs/Istruzioni_installazione.txt](docs/Istruzioni_installazione.txt).
 
 ## Quick Start
 
@@ -96,6 +109,16 @@ python Main_OnlineLearningMPC.py --Debug --Model GP
 ```
 
 The command-line interface in [Main_OnlineLearningMPC.py](Main_OnlineLearningMPC.py) supports the `--Model` and `--Debug` switches.
+
+## Fast smoke validation
+
+Before a longer run, use the lightweight repository check:
+
+```powershell
+python smoke_test.py
+```
+
+This validates the project root and key Python files without starting the controller loop.
 
 ## Execution Modes
 
