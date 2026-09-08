@@ -4,7 +4,7 @@ This guide provides the minimum setup steps required to understand and run the r
 
 ## Prerequisites
 
-The project currently expects a Python environment and a Windows-based development flow, as shown in [docs/Istruzioni_installazione.txt](Istruzioni_installazione.txt). The repository also depends on packages listed in [requirements.txt](../requirements.txt).
+The project expects Conda and a Windows-based development flow, as shown in [docs/Istruzioni_installazione.txt](Istruzioni_installazione.txt). Its dependencies are declared in [environment.yml](../environment.yml).
 
 The code references:
 
@@ -13,19 +13,24 @@ The code references:
 - OPC UA connectivity for real setpoint writing
 - numerical and optimization libraries such as NumPy, CasADi, and related packages
 
-These dependencies are implied by the source code and should be installed according to the project’s existing requirements file.
+These dependencies are installed from `conda-forge` using the project environment file.
 
 ## Installation Steps
 
 From a Windows PowerShell session:
 
 ```powershell
-py -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
+conda env create --prefix .\env --file environment.yml
+conda activate .\env
 ```
 
-This matches the repository’s installation instruction file and is the primary setup path currently documented in the project.
+The environment must be active before running scripts that use PyFMI. PyFMI depends on native libraries, including FMILibrary and Assimulo, which are installed through `conda-forge`. In VS Code, select `env\python.exe` as the Python interpreter.
+
+After changes to `environment.yml`, update an existing environment with:
+
+```powershell
+conda env update --prefix .\env --file environment.yml --prune
+```
 
 ## Configuration Steps
 
@@ -78,7 +83,7 @@ This distinction appears clearly in [Main_OnlineLearningMPC.py](../Main_OnlineLe
 ## Troubleshooting
 
 ### Dependency issues
-If the environment cannot import a required package, reinstall the requirements file and verify that the virtual environment is active.
+If the environment cannot import a required package, update the Conda environment and verify that it is active with `conda info --envs`.
 
 ### FMU errors
 If FMU simulation fails, verify that:

@@ -67,7 +67,7 @@ The repository currently contains both source code and research/runtime artifact
 
 ## Prerequisites
 
-This project is a research/industrial control application and depends on a specific scientific stack. Before running it, make sure the environment includes the packages listed in [requirements.txt](requirements.txt), especially:
+This project is a research/industrial control application and depends on a specific scientific stack. Before running it, create the Conda environment defined in [environment.yml](environment.yml), which includes:
 
 - Python 3.10+
 - NumPy, SciPy
@@ -80,12 +80,19 @@ The repository also assumes a local Windows-oriented setup for the industrial de
 
 ## Installation
 
-Use the following minimal setup flow:
+From PowerShell, create the local Conda environment and activate it:
 
 ```powershell
-py -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
+conda env create --prefix .\env --file environment.yml
+conda activate .\env
+```
+
+The Conda environment must be active before running scripts that use PyFMI. PyFMI relies on native dependencies, including FMILibrary and Assimulo, supplied by `conda-forge`. In VS Code, select `env\python.exe` as the Python interpreter.
+
+To update an existing local environment after `environment.yml` changes:
+
+```powershell
+conda env update --prefix .\env --file environment.yml --prune
 ```
 
 Further installation notes are available in [docs/Istruzioni_installazione.txt](docs/Istruzioni_installazione.txt).
@@ -94,8 +101,8 @@ Further installation notes are available in [docs/Istruzioni_installazione.txt](
 
 The minimum steps to run the application are:
 
-1. Create and activate a virtual environment.
-2. Install dependencies with `pip install -r requirements.txt`.
+1. Create the Conda environment from `environment.yml`.
+2. Activate it with `conda activate .\env`.
 3. Run the main controller script:
 
 ```powershell
@@ -141,9 +148,8 @@ This mode is more operational and depends on external infrastructure that is not
 A typical execution workflow is:
 
 ```powershell
-py -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
+conda env create --prefix .\env --file environment.yml
+conda activate .\env
 python Main_OnlineLearningMPC.py --Model GP
 ```
 
