@@ -8,7 +8,7 @@ import warnings
 
 class OPCUA_SetPoint:
     def __init__(self, **kwargs):
-        self.server_url = "opc.tcp://172.25.101.183:4840/freeopcua/server/" 
+        self.server_url = "opc.tcp://xxx.xxx.xxx.xxxx:4840/freeopcua/server/" 
         self.connected = False
         self.connect()
 
@@ -26,11 +26,11 @@ class OPCUA_SetPoint:
     def write_node(self, node_data):
         for data in node_data:
             node = self.client.get_node(data['NodeID'])
-            # Ricava il tipo atteso dal server OPC UA
+            # Get the expected OPC UA
             expected_uaDataType = node.get_data_type_as_variant_type()
             try:
                 val = data['Value']
-                # Cast automatico in base al tipo atteso
+                # Automatic selection of datatype according to expected 
                 if expected_uaDataType.name in ['Float', 'Double']:
                     val = float(val)
                 elif expected_uaDataType.name == 'Int32':
@@ -64,7 +64,7 @@ class OPCUA_SetPoint:
         node_data = []
         for _, row in df.iterrows():
             name = row['Name']
-            name = name.replace(' ', '')  # Rimuove gli spazi dal nome
+            name = name.replace(' ', '') # Cleaning up spaces in the name 
             nodeid = row['NodeID']
             datatype = row['DATA TYPE']
             if name not in values_dict:

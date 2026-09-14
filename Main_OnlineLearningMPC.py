@@ -112,6 +112,8 @@ def SetPointsToDERTF(Solved=True):
         controller.SetPointsWriter.DataMap['T_out_GB']['Value']  = GetValue(controller.u_out[4, k])
         controller.SetPointsWriter.DataMap['T_out_EB']['Value']  = GetValue(controller.u_out[5, k])
 
+        # Prevent sending setpoints outside the allowed range: 
+        # T < 45 and P < 10 are values that represent an error in MPC solution
         if abs(controller.SetPointsWriter.DataMap['Power_HL1']['Value']) < 10:
             controller.SetPointsWriter.DataMap['Power_HL1']['Value'] = 32
         if abs(controller.SetPointsWriter.DataMap['Power_HL2']['Value']) < 10:
@@ -139,14 +141,16 @@ def SetPointsToDERTF(Solved=True):
         log_exception(msg)
         print(msg)
 
+    # Collecting the list of OPCUA nodes
     node_data = []
     for key in controller.SetPointsWriter.DataMap.keys():
         node_data.append(controller.SetPointsWriter.DataMap[key])
 
-
+    # Check if connection is still active, otherwise reconnect
     if controller.SetPointsWriter.client is None:
         controller.SetPointsWriter.connect()
-        
+
+    # Write setpoint with retry logic and maximum attempt limit
     max_attempts = 5
     for attempt in range(max_attempts):
         try:
@@ -241,8 +245,8 @@ def MPC_solve():
     try:
         flag=1
         slack_tol=1e-3 # TUNING PARAMETER
-        ### Compute the control law every 15 minutes ###
 
+        ### Compute the control law every 15 minutes ###
         controller.u_control, controller.slack, controller.y_nnarx, controller.computation_time[k], controller.sigma_current, controller.slack_explo, controller.sol_feas[k]= controller.mpc_controller(
             k, controller.Param["T_C0"], controller.y_out, controller.u_out, controller.y_rnn_out,flag) #MOD_new1 aggiunto controller.sol_feas[k] agli output di mpc_controller
         if np.any(controller.slack_explo <= slack_tol): # TUNING, TO CHECK
@@ -271,14 +275,13 @@ def MPC_solve():
             msg = f"Error occurred in MPC controller: {e}"
         log_exception(msg)
         print(msg)
+
         # mpc_controller sets self.y_nnarx to a symbolic CasADi MX during
         # SetOptimizationVariables(); if it throws before returning, the
         # attribute remains symbolic. Restore to the last numeric fallback.
         controller.y_nnarx = controller.y_prec
 
     controller.u_out[:, k] = controller.u_control
-    # print( u[4:6, k])
-    # print(controller.y_prec)
     if k < controller.Param["T_C0"]-1:
         controller.s_out[:, k] = controller.slack[:, 0]
     else:
@@ -291,7 +294,7 @@ def MPC_solve():
     
     gamma_pred_gas  = 0.034     #TUNING
     COP             = 0.8       #TUNING
-    eff_EB          = 0.8       #TUNING # Metterla variabile?
+    eff_EB          = 0.8       #TUNING 
     r               = int(np.floor(k / 3))
     c_el            = controller.ensure2D(controller.c_el)
     gamma_pred_el   = c_el[r, 0] / 1000
@@ -327,7 +330,7 @@ def MPC_solve():
 
 
 if __name__ == "__main__":
-# Programma principale
+# Main program
 # This section configures the runtime mode and the controller parameters used to
 # initialize the MPC loop. The dictionary is intentionally kept as a single
 # configuration object to match the project’s current architecture and avoid a
@@ -408,7 +411,8 @@ if __name__ == "__main__":
     # Opts['Debug']   = True
     # Param['Model']  = 'GP'
 
-    # Initizialization of MPC
+    # MPC initialization
+    
     # The controller instance is created first, then the runtime state variables are
     # attached to it. This matches the existing lifecycle: the object owns the
     # optimization model, prediction buffers, and execution state used by the worker

@@ -29,9 +29,9 @@ import concurrent.futures
 
 class InfluxDB_connect:
    def __init__(self,**kwargs):
-      self.token  = "PK2N9CkpN_NxKVPaqHx1kv8MsTzfkDUhn3umgD0dUnbSfg0wEWxNyrOs5umvJYd6O2s5S3w1o3OWj8dFcKTwaA==" #"btjVn84rLctD0R_2WjhUxPKUeOawZFuxRhG4bqbUCsI45RTqYb7q_8-Ib_Q7SQMLycyVXipygmtkHklrL1Q5qg==" #"7bIWbhcIEs891yPyNnYDcRP-33aWUYFvbBgYiu770r-nGzq0agBCdhnMWjCU5Kfx54B6bdqsJ6xpdWmgNwj5Yg==" #
+      self.token  = "token" 
       self.org    = "RSE"
-      self.url    = "http://172.25.102.65:8086"
+      self.url    = "http://xxx.xxx.xxx.xxxx:8086"
       self.Bucket = "raw_data"
 
       self.InfluxDBclient  = InfluxDBClient(url=self.url, token=self.token, org=self.org)
@@ -109,7 +109,7 @@ class InfluxDB_connect:
 class OPCUA_connect:
    def __init__(self,**kwargs):
 
-      self.server_url = "opc.tcp://172.25.101.183:4840/freeopcua/server/" 
+      self.server_url = "opc.tcp://xxx.xxx.xxx.xxx:4840/freeopcua/server/" 
       self.connected  = False
 
       # OPC UA Client reconnection parameters

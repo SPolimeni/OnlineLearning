@@ -31,7 +31,7 @@ def SaveAggregatedData(controller, t_step):
         """data shape: [num_steps] — prende il valore scalare a t_step"""
         _append_row(filename, [float(data[t_step])])
 
-    # CSV: serie temporali (append incrementale, resiliente ai crash)
+    # CSV: timeseries (incremental append, robust to interruptions)
     save_col(controller.y_out,          f'y_measured_{InitialDate}.csv')
     save_col(controller.y_pred_out,     f'y_pred_{InitialDate}.csv')
     save_row(controller.y_rnn_out,      f'y_rnn_{InitialDate}.csv')
@@ -43,7 +43,7 @@ def SaveAggregatedData(controller, t_step):
     save_scalar(controller.computation_time,   f'computational_time_{InitialDate}.csv')
     save_scalar(controller.sol_feas,   f'sol_feas{InitialDate}.csv') #MOD_new1 aggiunta questa riga per salvare sol_feas 
 
-    # CSV: parametri di configurazione (scritto solo al primo timestep)
+    # CSV: configurations' parameters (only on first timestep)
     params_csv_path = os.path.join(folder_name, f'config_{InitialDate}.csv')
     if not os.path.exists(params_csv_path):
         with open(params_csv_path, 'w', newline='') as f:
@@ -52,7 +52,7 @@ def SaveAggregatedData(controller, t_step):
             for key, val in controller.Param.items():
                 w.writerow([key, val])
 
-    # PKL: sovrascrive con lo stato corrente degli array fino a t_step
+    # PKL: overwrite current state up to t_step
     pkl_path = os.path.join(folder_name, f'ThetaAndSigma_{InitialDate}.pkl')
     with open(pkl_path, 'wb') as f:
         pickle.dump({'theta': controller.theta_history, 'sigma': controller.sigma}, f)

@@ -129,12 +129,14 @@ class MPC:
         self.Pb_min_eb=Param["Pb_min_eb"]
         self.data=loadmat(Param["nnarx_mat"])
         self.c_el=self.ensure2D(Param["c_el"])
+
         # Load the district-heating demand profile and add the current shift offset.
         # The profile is stored as a time series and used as the known load input over
         # the horizon; this is part of the prediction model, not a hard-coded plant signal.
         self.Potenze=Param["Potenza"].T+Param['P_Shift'] #potenza all'istante k
         self.Model=Param["Model"]
         self.T_C0=Param["T_C0"] #istante in cui inizio ad applicare la legge di controllo
+        
         ### initial value MPC
         # These values are the warm-start trajectory used at startup before the first
         # optimization solve. They avoid a full cold start and provide a stable initial
