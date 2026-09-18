@@ -10,7 +10,7 @@ Functional overview:
   plant constraints, economic parameters, and model metadata.
 - At each control step it reads the current system state and reconstructs the
   last input/output history used by the predictive model.
-- The NNARX/GP/BNN model is used to generate a prediction over the horizon and
+- The NNARX/GP/BNNExp model is used to generate a prediction over the horizon and
   the optimizer solves a constrained finite-horizon problem.
 - The first control action of the computed sequence is applied to the plant or the
   debug FMU, while the complete optimized trajectory is kept as warm start for the
@@ -19,7 +19,6 @@ Functional overview:
   the last-layer update and uncertainty-dependent slack constraints.
 """
 
-import gpytorch
 import torch
 
 import casadi
@@ -29,6 +28,14 @@ from scipy.io import loadmat
 # from pyfmi import load_fmu
 import time
 
+from model_strategies import NNARXStrategy, GPStrategy, BNNExpStrategy
+
+_STRATEGY_FACTORY = {
+    "NNARX": NNARXStrategy,
+    "GP": GPStrategy,
+    "BNNExp": BNNExpStrategy,
+}
+
 
 class MPC:
     """Model-predictive controller for the thermal energy system.
@@ -36,26 +43,11 @@ class MPC:
     The controller loads the neural model, stores the previous optimal trajectory,
     and repeatedly solves a constrained optimization problem. The first control
     action from the optimized horizon is applied to the plant or simulation model.
+
+    All behavior specific to a given Param["Model"] ('NNARX', 'GP', 'BNNExp') is
+    delegated to a per-model strategy object (see model_strategies.py); this class
+    holds only the common orchestration logic, which is the NNARX behavior itself.
     """
-
-    class GPRegressionModel(gpytorch.models.ExactGP):
-        """Small GP helper used for model-error correction patterns in the code."""
-
-        def __init__(self, train_x, train_y, likelihood):
-            super().__init__(train_x, train_y, likelihood)
-            self.mean_module = gpytorch.means.ConstantMean()
-            self.covar_module = gpytorch.kernels.ScaleKernel(
-                gpytorch.kernels.RBFKernel(
-                    lengthscale=1.0,
-                    length_scale_bounds=(1e-3, 1e3),
-                    ard_num_dims=27
-                )
-            )
-
-        def forward(self, x):
-            mean_x = self.mean_module(x)
-            covar_x = self.covar_module(x)
-            return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
 
     def __init__(self, Param: dict):
         """Initialize controller parameters, model data, and optimization state.
@@ -135,6 +127,8 @@ class MPC:
         # the horizon; this is part of the prediction model, not a hard-coded plant signal.
         self.Potenze=Param["Potenza"].T+Param['P_Shift'] #potenza all'istante k
         self.Model=Param["Model"]
+        if self.Model not in _STRATEGY_FACTORY:
+            raise ValueError(f"Unsupported Model '{self.Model}'. Supported models: {sorted(_STRATEGY_FACTORY)}")
         self.T_C0=Param["T_C0"] #istante in cui inizio ad applicare la legge di controllo
         
         ### initial value MPC
@@ -158,20 +152,6 @@ class MPC:
         Pb_pred[1,:] = cp * self.q_eb * (self.u_prec[5,:] - self.y_prec[1,:])
         self.Pb_prec = Pb_pred
         self.sigma_prec = 0.05 * np.ones((self.N, self.n_out))
-        ### Buffer Gaussian Process ###
-        # The GP correction layer keeps a rolling history of residuals and inputs used
-        # to learn local deviations between the nominal NNARX prediction and the real
-        # measured thermal behavior. This history is intentionally bounded to avoid
-        # unbounded memory growth during long runs.
-        self.gp_buffer = {
-        "y_buffer_1": [],
-        "y_buffer_2": [],
-        "y_buffer_3": [],
-        "X_buffer_1": [],
-        "X_buffer_2": [],
-        "X_buffer_3": []
-        }
-        self.y_gp= np.empty((self.num_steps + self.N, self.n_out), dtype=object)
 
         ### bayesian last layer ###
         # The trained network stores the last-layer weights in the MATLAB structure.
@@ -190,24 +170,13 @@ class MPC:
         self.out_scale=output_scaler['scale'][0]
 
         self.theta=np.vstack([U0,b0])
-        self.L_prev=self.L_prev0*np.eye(10) #TUNING 
+        self.L_prev=self.L_prev0*np.eye(10) #TUNING
         self.Q_prev=np.linalg.inv(self.L_prev)@self.theta #MODIFIED
-        
-        self.beta = np.array([self.beta0_1/self.out_scale[0], self.beta0_2/self.out_scale[1], self.beta0_3/self.out_scale[2]]) #MODIFIED TUNING
-        
-        self.epsilon= self.epsilon0/self.beta[0]*self.beta #MODIFIED - TUNING
         self.sigma_epsilon2 = self.sigma_epsilon0_2 #MODIFIED - TUNING
 
-        ### MPC optimization Variables ###
-        # self.opti = casadi.Opti()
-        # self.u = self.opti.variable(self.n_inp, self.n_uopt)
-        # self.y = self.opti.variable(self.n_out, self.N)
-        # # self.y_nnarx = self.opti.variable(self.n_out, self.N)
-    
-        # self.s = self.opti.variable(self.n_slack, 1)
-        # self.J  = self.opti.variable(1, 1)
-        # self.Pb  = self.opti.variable(2, self.N)
-    
+        self.strategy = _STRATEGY_FACTORY[self.Model]()
+        self.strategy.on_init(self)
+
     def ensure2D(self, x: np.ndarray):
         """Return a column-oriented 2D array for arrays that are only 1D."""
         if x.ndim == 1:
@@ -218,446 +187,6 @@ class MPC:
         """Convert NumPy data into a PyTorch tensor in the float format used by the model code."""
         return torch.from_numpy(np.asarray(x)).float()
 
-    def gaussian_process(self, k, ys, y_mpc, input, u_mpc, ground_truth):
-        """Apply the GP-based correction pattern used when the controller operates in GP mode.
-
-        This helper is part of the prediction layer and estimates how observed
-        errors evolve around the current state values.
-        """
-        ### Parameters ###
-        h=3
-        window_size=60
-        n_inp=5
-        y_mpc=y_mpc.T
-        n_out=3
-        N=self.N
-        #### Training of GP ###
-        x_k_1=[]
-        x_k_2=[]
-        x_k_3=[]
-        x_tilde_1=[]
-        x_tilde_2=[]
-        x_tilde_3=[]
-        u_1=[]
-        u_1_inp=[]
-        u_1_out=[]
-        u_2=[]
-        u_2_inp=[]
-        u_2_out=[]
-        u_3=[]
-        u_3_inp=[]
-        u_3_out=[]
-        
-        x_k_test_1=[]
-        x_k_test_2=[]
-        x_k_test_3=[]
-        u_k_test_1=[]
-        u_k_test_2=[]
-        u_k_test_3=[]
-        x_tilde_test_1=[]
-        x_tilde_test_2=[]
-        x_tilde_test_3=[]
-        y_final=np.empty((N, n_out), dtype=object)
-    
-        y_buffer_1= self.gp_buffer[ "y_buffer_1"]
-        y_buffer_2=self.gp_buffer[ "y_buffer_2"]
-        y_buffer_3=self.gp_buffer[ "y_buffer_3"]
-
-        X_buffer_1= self.gp_buffer[ "X_buffer_1"]
-        X_buffer_2=self.gp_buffer[ "X_buffer_2"]
-        X_buffer_3=self.gp_buffer[ "X_buffer_3"]
-
-        ### Reduction of the dataset ###
-        if len(X_buffer_1) > window_size-1:
-            X_buffer_1.pop(0)
-            X_buffer_2.pop(0)
-            X_buffer_3.pop(0)
-            
-            y_buffer_1.pop(0) 
-            y_buffer_2.pop(0)
-            y_buffer_3.pop(0)
-        
-                
-        for j in range(n_out):
-                
-            for i in range(h):
-                u_stato=[]
-                
-                if k-(h-i)-1<0:
-                    for s in range(n_inp):
-                        u_stato.insert(0,input[0,s])
-                    u_out=ys[0,j]
-                else:
-                    for s in range(n_inp):
-                        u_stato.insert(0,input[k-(h-i)-1, s])
-                    u_out=(ys[k-(h-i)-1, j])
-
-                if k-(h-i-1)-1<0:
-                    x_k=ground_truth[0,j]-ys[0,j]
-                else: 
-
-                    x_k=ground_truth[k-(h-i-1)-1,j]-ys[k-(h-i-1)-1,j]
-                if j==0:
-                    
-                    u_1_inp=u_stato+u_1_inp
-                    u_1_out.insert(0,u_out)
-                    x_k_1.insert(0,x_k)
-                elif j==1:
-                        u_2_inp=u_stato+u_2_inp
-                        u_2_out.insert(0,u_out)
-                        x_k_2.insert(0,x_k)
-                else:
-                    u_3_inp=u_stato+u_3_inp
-                    u_3_out.insert(0,u_out)
-                    
-                    x_k_3.insert(0,x_k)
-                
-        
-        y_k_1 = ground_truth[k, 0] - ys[k, 0] 
-        y_k_2 = ground_truth[k, 1] - ys[k, 1]
-        y_k_3 = ground_truth[k, 2] - ys[k, 2]
-
-        for s in range(n_inp):
-            u_1_inp.insert(0,input[k-1, s])
-            u_2_inp.insert(0,input[k-1, s])
-            u_3_inp.insert(0,input[k-1, s])
-        u_1_out.insert(0,ys[k-1, 0])
-        u_2_out.insert(0,ys[k-1, 1])
-        u_3_out.insert(0,ys[k-1, 2])
-        u_1.extend(u_1_inp)
-        u_1.extend(u_1_out)
-        u_2.extend(u_2_inp)
-        u_2.extend(u_2_out)
-        u_3.extend(u_3_inp)
-        u_3.extend(u_3_out)
-        x_tilde_1.extend(x_k_1)
-        x_tilde_1.extend(u_1)
-        x_tilde_2.extend(x_k_2)
-        x_tilde_2.extend(u_2)
-        x_tilde_3.extend(x_k_3)
-        x_tilde_3.extend(u_3)
-        
-        
-        #update of buffer
-        X_buffer_1.append(x_tilde_1) 
-        X_buffer_2.append(x_tilde_2) 
-        X_buffer_3.append(x_tilde_3)   
-
-        
-        y_buffer_1.append(y_k_1)
-        y_buffer_2.append(y_k_2)
-        y_buffer_3.append(y_k_3)
-        
-        for j in range(n_out):
-            
-            if j==0:
-                x_tensor = self.np2torch(np.stack(X_buffer_1))
-                
-                y_tensor = self.np2torch(np.array(y_buffer_1) )
-            elif j==1:
-                x_tensor = self.np2torch(np.stack(X_buffer_2))
-                y_tensor = self.np2torch(np.array(y_buffer_2))
-            else:
-                x_tensor = self.np2torch(np.stack(X_buffer_3))
-                y_tensor = self.np2torch(np.array(y_buffer_3))
-            
-            
-            
-            likelihood = gpytorch.likelihoods.GaussianLikelihood()
-            
-            model = MPC.GPRegressionModel(x_tensor, y_tensor, likelihood)
-            model.train()
-            likelihood.train()
-            optimizer = torch.optim.Adam(model.parameters(), lr=0.3) 
-            mll = gpytorch.mlls.ExactMarginalLogLikelihood(likelihood, model)
-
-            r=0
-            delta=10000
-            prev_loss=0
-            ### optimization of the GP parameters ###
-            while delta>0.1 and r <200:
-                optimizer.zero_grad()
-                output = model(x_tensor)
-                
-                loss = -mll(output, y_tensor)
-                delta=loss.item()-prev_loss
-                delta=np.absolute(delta)
-
-            
-                loss.backward()
-                optimizer.step()
-                prev_loss=loss.item()
-                r=r+1
-            
-            if j==0:
-                model_1=model
-                likelihood_1=likelihood
-            elif j==1:
-                model_2=model
-                likelihood_2=likelihood
-            else:
-                model_3=model
-                likelihood_3=likelihood
-
-            for r in range(0,k+1):
-                self.y_gp[r,j] = ground_truth[r,j]-ys[r,j]
-
-
-
-
-        ###### TEST per k+1 e fino a k+N in simulazione ####
-        t=k
-        r=-1
-        for k in range(t,t+N):   
-            r=r+1
-            x_k_1=[]
-            x_k_2=[]
-            x_k_3=[]
-            x_tilde_1=[]
-            x_tilde_2=[]
-            x_tilde_3=[]
-            u_1=[]
-            u_1_inp=[]
-            u_1_out=[]
-            u_2=[]
-            u_2_inp=[]
-            u_2_out=[]
-            u_3=[]
-            u_3_inp=[]
-            u_3_out=[]
-            
-            x_k_test_1=[]
-            x_k_test_2=[]
-            x_k_test_3=[]
-            u_k_test_1=[]
-            u_k_test_2=[]
-            u_k_test_3=[]
-            x_tilde_test_1=[]
-            x_tilde_test_2=[]
-            x_tilde_test_3=[]
-                
-                    
-            for j in range(n_out):
-                    
-                for i in range(h):
-                    u_stato=[]
-                        
-                    
-                    if k-(h-i)-1<0:
-                        for s in range(n_inp):
-                            u_stato.insert(0,input[0,s])
-                        u_out=ys[0,j]
-                    else:
-                       
-                        for s in range(n_inp):
-                            u_stato.insert(0,input[k-(h-i)-1, s])
-                        u_out=(ys[k-(h-i)-1, j])
-
-                    if k-(h-i-1)-1<0:
-                    
-                        x_k=ground_truth[0,j]-ys[0,j]
-                    else: 
-                        
-                        if k-(h-i-1)-1>=t+1:
-                            x_k=self.y_gp[k-(h-i-1)-1,j]
-                        else:
-                            x_k=self.y_gp[k-(h-i-1)-1,j]
-                    if j==0:
-                        
-                        u_1_inp=u_stato+u_1_inp
-                        u_1_out.insert(0,u_out)
-                        x_k_1.insert(0,x_k)
-                    elif j==1:
-                        u_2_inp=u_stato+u_2_inp
-                        u_2_out.insert(0,u_out)
-                        x_k_2.insert(0,x_k)
-                    else:
-                        u_3_inp=u_stato+u_3_inp
-                        u_3_out.insert(0,u_out)
-                        
-                        x_k_3.insert(0,x_k)
-            for s in range(n_inp):
-                u_1_inp.insert(0,input[k-1, s])
-                u_2_inp.insert(0,input[k-1, s])
-                u_3_inp.insert(0,input[k-1, s])
-            u_1_out.insert(0,ys[k-1, 0])
-            u_2_out.insert(0,ys[k-1, 1])
-            u_3_out.insert(0,ys[k-1, 2])
-
-            u_1.extend(u_1_inp)
-            u_1.extend(u_1_out)
-            u_2.extend(u_2_inp)
-            u_2.extend(u_2_out)
-            u_3.extend(u_3_inp)
-            u_3.extend(u_3_out)
-            x_tilde_1.extend(x_k_1)
-            x_tilde_1.extend(u_1)
-            x_tilde_2.extend(x_k_2)
-            x_tilde_2.extend(u_2)
-            x_tilde_3.extend(x_k_3)
-            x_tilde_3.extend(u_3)
-        
-            #vettori test
-            x_k_1.pop()
-            x_k_2.pop()
-            x_k_3.pop()
-
-            if k>=t+1:
-                
-                x_k_1.insert(0,self.y_gp[k,0] )
-            
-            
-                x_k_2.insert(0,self.y_gp[k,1])
-                x_k_3.insert(0,self.y_gp[k,2] )
-            else:
-                x_k_1.insert(0,self.y_gp[k,0] )
-                
-            
-                x_k_2.insert(0,self.y_gp[k,1])
-                x_k_3.insert(0,self.y_gp[k,2] )
-
-            x_k_test_1=x_k_1
-
-            x_k_test_2=x_k_2
-            x_k_test_3=x_k_3
-        
-            
-            
-            for s in range(n_inp):
-                u_1_inp.pop()
-                u_2_inp.pop()
-                u_3_inp.pop()
-            u_1_out.pop()
-            u_2_out.pop()
-            u_3_out.pop()
-            if k==t:
-                print(k)
-                uk=input
-                input=casadi.MX.zeros(self.num_steps+N+N,5)
-                print(input.shape)
-                input[0:k,:]=uk[0:k,:]
-                input[k:k+N,:]=u_mpc
-                
-            
-            
-            if k==t:
-                xk=ys
-                ys=casadi.MX.zeros(self.num_steps+N,3)
-                ys[0:k+1,:]=xk[:k+1,:]
-                ys[k+1:k+N+1,:]=y_mpc[:,:]
-                
-                
-            for s in range(n_inp):
-                u_1_inp.insert(0, input[k, s] )
-                u_2_inp.insert(0,input[k, s])
-                u_3_inp.insert(0,input[k, s] ) 
-            if k>=t+1:
-            
-                u_1_out.insert(0,ys[k,0])
-                u_2_out.insert(0,ys[k,1])
-                u_3_out.insert(0,ys[k,2]) 
-        
-            else:
-
-                u_1_out.insert(0,ys[k,0])
-                
-                u_2_out.insert(0,ys[k,1])
-                u_3_out.insert(0,ys[k,2])   
-            
-            u_k_test_1.extend(u_1_inp)
-            u_k_test_1.extend(u_1_out)
-            a=np.array(u_1_inp)
-            b=np.array(u_1_out)
-            c=np.array(x_k_test_1)
-            
-            u_k_test_2.extend(u_2_inp)
-            u_k_test_2.extend(u_2_out)
-            
-            u_k_test_3.extend(u_3_inp)
-            u_k_test_3.extend(u_3_out) 
-            x_tilde_test_1.extend(x_k_test_1)
-            x_tilde_test_1.extend(u_k_test_1)
-        
-            
-            x_tilde_test_2.extend(x_k_test_2)
-            x_tilde_test_2.extend(u_k_test_2)
-            
-
-            x_tilde_test_3.extend(x_k_test_3)
-            x_tilde_test_3.extend(u_k_test_3)
-        
-            for j in range(n_out)  : 
-                
-                if j==0:
-                    test=x_tilde_test_1
-                    model=model_1
-                    likelihood=likelihood_1
-                    z_vect=np.array(y_buffer_1)
-                    X_train=(X_buffer_1)
-                elif j==1:
-                    model=model_2
-                    test=x_tilde_test_2
-                    likelihood=likelihood_2
-                    z_vect=np.array(y_buffer_2)
-                    X_train=(X_buffer_2)
-                else:
-                    model=model_3
-                    test=x_tilde_test_3
-                    likelihood=likelihood_3
-                    z_vect=np.array(y_buffer_3)
-                    X_train=(X_buffer_3)
-                model.eval()
-                l= model.covar_module.base_kernel.lengthscale.detach().numpy()
-                l=l.flatten()
-                delta=np.diag(l**(-2)) 
-                mean_prior=0
-                sigma_F=( model.covar_module.outputscale.detach().numpy()) #squared
-                sigma_N=(likelihood.noise_covar.noise.detach().numpy()) #squared
-                #sigma squareS
-                likelihood.eval()
-                kern=casadi.MX(1,len(X_train))
-                K=np.zeros([len(X_train),len(X_train)])
-                with torch.no_grad(), gpytorch.settings.fast_pred_var():
-                    test_arr=np.array(test)
-                    for i in range(len(X_train)):
-                        diff_1=(test_arr-np.stack(X_train[i])).transpose()
-                        #print(diff_1.shape)
-                        kern[0,i]=sigma_F*np.exp(-0.5*diff_1.transpose()@(delta@diff_1))
-                        for a in range(len(X_train)):
-                                diff_2 =np.stack(X_train[i])-np.stack(X_train[a])
-                            
-                                if i==a:
-                                    delta_kronecker=1
-                                else:
-                                    delta_kronecker=0
-                                K[i,a]=sigma_F*np.exp(-0.5*((diff_2).transpose()@(delta@diff_2)))+sigma_N*delta_kronecker
-                    
-                    if t==4:
-
-                        inverse_K= 1/K
-                    else:
-                        inverse_K=np.linalg.inv(K)
-                    
-                    y_pred_mean=kern@( inverse_K@(z_vect-mean_prior))+mean_prior
-                    y_pred_mean=np.array(y_pred_mean)
-                    yk=np.array(ys[k+1, j] )
-                    
-                    y_pred= yk + y_pred_mean
-                    
-                    if j==0:
-                        self.y_gp[k+1,j]=y_pred_mean
-                    
-                        
-                    elif j==1:
-                        self.y_gp[k+1,j]=y_pred_mean
-                       
-                    else:
-                        self.y_gp[k+1,j]=y_pred_mean
-                       
-
-                    y_final[r, j] = y_pred 
-                   
-        return y_final
     def SetOptimizationVariables(self):
         """Create the CasADi optimization variables for the receding-horizon problem."""
         # The optimization variables represent the sequence of future control actions
@@ -674,11 +203,7 @@ class MPC:
         self.Pb  = self.opti.variable(2, self.N)
         self.slack_y = self.opti.variable(self.n_out, self.N)
 
-        if self.Model == "BNNExp":
-            self.slack_explo = self.opti.variable(self.n_out, self.N) #MODIFIED
-            self.sigmaK = self.opti.variable(self.N, self.n_out)
-        else:
-            self.T_slack = self.opti.variable(1, self.N)
+        self.strategy.declare_extra_optimization_variables(self)
 
     def SetConstraints(self):
         """Add temperature, flow, power, and dynamic constraints to the optimization problem.
@@ -693,19 +218,13 @@ class MPC:
         # The policy is to keep the problem feasible while still allowing a meaningful
         # economic trade-off between comfort and operating cost.
          ### Constraints ###
-        
-        if self.Model == 'Benchmark':
-            # Benchmark mode is a fixed-temperature operating point used for tests and
-            # comparisons; it does not follow the variable setpoint logic of the live model.
-            self.opti.subject_to(self.u[4,:] == 72)
-            self.opti.subject_to(self.u[5,:] == 72)
-        else:
-            # The generator and boiler outlet temperatures are bounded by the plant
-            # operational envelope. This keeps the predicted solution in realistic ranges.
-            self.opti.subject_to(self.Ts_min_eb <= self.u[5,:])
-            self.opti.subject_to(self.Ts_max_eb>= self.u[5,:])
-            self.opti.subject_to(self.Ts_min_gb<= self.u[4,:])
-            self.opti.subject_to(self.Ts_max_gb >= self.u[4,:])
+
+        # The generator and boiler outlet temperatures are bounded by the plant
+        # operational envelope. This keeps the predicted solution in realistic ranges.
+        self.opti.subject_to(self.Ts_min_eb <= self.u[5,:])
+        self.opti.subject_to(self.Ts_max_eb>= self.u[5,:])
+        self.opti.subject_to(self.Ts_min_gb<= self.u[4,:])
+        self.opti.subject_to(self.Ts_max_gb >= self.u[4,:])
 
         # The first four control inputs represent the thermal power loads for the four
         # plant branches. They are tied to the demand forecast through a shifted load
@@ -725,73 +244,9 @@ class MPC:
         # The predicted outputs y and the surrogate model output y_nnarx must match the
         # recurrent dynamics generated by the NNARX/GP layer.
         y_N,output_rnn,sigma_est= self.model_rnn(self.t,self.data, self.u, self.y_prec,self.u_prec,self.xk,self.uk,self.y,self.N/self.Nb,self.y_rnn,self.theta)
-        
-        if self.Model=='GP':
-            self.opti.subject_to(self.y == y_N[:,0:self.N])
-            self.opti.subject_to(self.y_nnarx == output_rnn[:,0:self.N])
-        else:
-            self.opti.subject_to(self.y == output_rnn[:,0:self.N])
-            self.opti.subject_to(self.y_nnarx== output_rnn[:,0:self.N])
 
-
-        if self.Model== 'BNNExp':
-            # In the Bayesian version the variance term acts as an uncertainty band around
-            # the nominal prediction. Slack variables allow the optimizer to relax the
-            # constraints when the uncertainty becomes too large, while still preserving a
-            # feasible and stable solution.
-            self.opti.subject_to((self.Ts_min_supply - self.out_bias[0])/self.out_scale[0] + self.beta[0]*(self.sigmaK[:,0]).T - self.slack_y[0,:] <= (self.y[0,:] - self.out_bias[0])/self.out_scale[0])
-            self.opti.subject_to((self.Ts_max - self.out_bias[0])/self.out_scale[0] - self.beta[0]*(self.sigmaK[:,0]).T + self.slack_y[0,:] >= (self.y[0,:] - self.out_bias[0])/self.out_scale[0]) 
-
-            # Tr_min <= Tr <= Tr_max
-            self.opti.subject_to((self.Tr_min - self.out_bias[1])/self.out_scale[1] + self.beta[1]*(self.sigmaK[:,1]).T - self.slack_y[1,:] <= (self.y[1,:] - self.out_bias[1])/self.out_scale[1])
-            self.opti.subject_to((self.Tr_max - self.out_bias[1])/self.out_scale[1] - self.beta[1]*(self.sigmaK[:,1]).T + self.slack_y[1,:] >= (self.y[1,:] - self.out_bias[1])/self.out_scale[1])
-
-            # q_min <= q <= q_max
-            self.opti.subject_to((self.m_min - self.out_bias[2])/self.out_scale[2] + self.beta[2]*(self.sigmaK[:,2]).T - self.slack_y[2,:] <= (self.y[2,:] - self.out_bias[2])/self.out_scale[2])
-            self.opti.subject_to((self.m_max - self.out_bias[2])/self.out_scale[2] - self.beta[2]*(self.sigmaK[:,2]).T + self.slack_y[2,:] >= (self.y[2,:] - self.out_bias[2])/self.out_scale[2])
-
-            self.opti.subject_to(self.sigmaK==sigma_est)
-
-            for i in range(0,self.n_out):
-                self.opti.subject_to(self.slack_y[i,:] >= 1e-8)
-                  
-                #self.opti.subject_to(self.slack_y[i,:] <= 50) #MOD_new1 metto vincoli ad hoc per variabili slack
-                
-                #MOD_new1 aggiunti i seguenti vincoli per slack_y
-                self.opti.subject_to(self.slack_y[0,:] <= 50/self.out_scale[0]) 
-                self.opti.subject_to(self.slack_y[1,:] <= 50/self.out_scale[1]) 
-                self.opti.subject_to(self.slack_y[2,:] <= 50/self.out_scale[2]) 
-                self.opti.subject_to(self.slack_y[0,:2] <= 5/self.out_scale[0]) 
-                self.opti.subject_to(self.slack_y[1,:2] <= 1/self.out_scale[1]) 
-                self.opti.subject_to(self.slack_y[2,:2] <= 3/self.out_scale[2])                
-                ##### 
-
-                self.opti.subject_to(self.slack_explo[i,:] >= 1e-6)
-                self.opti.subject_to(self.slack_explo[i,:] <= 1e1) 
-
-            if self.flag == 1: 
-                ### Exploration Constraints ###
-                self.opti.subject_to(self.beta[0]*(self.sigmaK[:,0]).T>=self.epsilon[0]-self.slack_explo[0,:]/self.out_scale[0])  
-                self.opti.subject_to(self.beta[1]*(self.sigmaK[:,1]).T>=self.epsilon[1]-self.slack_explo[1,:]/self.out_scale[1])    
-                self.opti.subject_to(self.beta[2]*(self.sigmaK[:,2]).T>=self.epsilon[2]-self.slack_explo[2,:]/self.out_scale[2])    
-        else:
-            # For the non-BNN models the safety constraints are imposed directly on the
-            # output trajectory: the target temperatures and flow range must remain inside
-            # the admissible operational band. A dedicated slack variable is used only for
-            # the supply-temperature lower bound to prevent overly aggressive feasibility
-            # losses when the forecast is uncertain.
-            self.opti.subject_to(self.Ts_max + self.T_slack >= self.y[0,:])
-            self.opti.subject_to(self.Tr_min <= self.y[1,:])
-            self.opti.subject_to(self.Tr_max  >= self.y[1,:])
-            self.opti.subject_to(self.m_min<= self.y[2,:])
-            self.opti.subject_to(self.m_max >= self.y[2,:])
-            self.opti.subject_to(self.y[0,:] >= self.Ts_min_supply - self.T_slack) #MODIFIED
-            self.opti.subject_to(self.T_slack >= 0)
-            self.opti.subject_to(self.T_slack <= 20)
-
-        if self.Model == 'BNNExp':
-            for i in range(self.n_out):
-                self.opti.subject_to(self.slack_y[i,:] >= 1e-8)
+        self.strategy.feedback_constraint(self, y_N, output_rnn)
+        self.strategy.output_constraints(self, sigma_est)
 
         # The last two inputs are outlet temperatures; they are limited to a small
         # step variation with respect to the previous solution so the control action
@@ -867,19 +322,8 @@ class MPC:
         #gamma_slack=1000 #TUNING PARAMETER
         gamma_slack = gamma_slack0*np.array([self.out_scale[0], self.out_scale[1], self.out_scale[2]]) #MODIFIED
 
-        if self.Model=="BNNExp":
-            # self.opti.subject_to(self.J ==1*(gamma_pred_gas @(1/1000*self.Ts/3600 * self.Pb[0,:].T/COP)+
-            # gamma_pred_el @ (1/1000*self.Ts/3600 * self.Pb[1,:].T/1)+ gamma*(self.y[0,self.N-1] -T_ref*casadi.MX.ones((1, 1)))**2+ gamma_slack*casadi.sum1(casadi.sum2(self.s))) + gamma_exp@self.slack_explo*self.flag )
-            
-            #MOD_new1 commento la seguente funzione di costo e ne inserisco un'altra sotto
-            #self.opti.subject_to(self.J ==gamma_pred_gas @(1/1000*self.Ts/3600 * self.Pb[0,:].T/COP)+gamma_pred_el @ (1/1000*self.Ts/3600 * self.Pb[1,:].T/eff_EB)+ gamma*(self.y[0,self.N-1] -T_ref*casadi.MX.ones((1, 1)))**2+ gamma_slack[0]*casadi.sum1(self.slack_y[0,:]) + gamma_slack[1]*casadi.sum1(self.slack_y[1,:]) + gamma_slack[2]*casadi.sum1(self.slack_y[2,:]) + gamma_exp@self.slack_explo@np.ones((self.N, 1))*self.flag )
-            
-            #MOD_new1 aggiunta funzione costo dove peso quadraticamente slack_y e in modo diverso lungo l'orizzonte
-            self.opti.subject_to(self.J ==gamma_pred_gas @(1/1000*self.Ts/3600 * self.Pb[0,:].T/COP)+gamma_pred_el @ (1/1000*self.Ts/3600 * self.Pb[1,:].T/eff_EB)+ gamma*(self.y[0,self.N-1] -T_ref*casadi.MX.ones((1, 1)))**2+ gamma_slack[0]*self.slack_y[0,:4]@self.slack_y[0,:4].T + gamma_slack[1]*self.slack_y[1,:4]@self.slack_y[1,:4].T+ gamma_slack[1]*self.slack_y[2,:4]@self.slack_y[2,:4].T + 1e-3*(gamma_slack[0]*self.slack_y[0,4:]@self.slack_y[0,4:].T + gamma_slack[1]*self.slack_y[1,4:]@self.slack_y[1,4:].T + gamma_slack[2]*self.slack_y[2,4:]@self.slack_y[2,4:].T) + gamma_exp@self.slack_explo@np.ones((self.N, 1))*self.flag )
-        
-        else:
-            self.opti.subject_to(self.J ==gamma_pred_gas @(1/1000*self.Ts/3600 * self.Pb[0,:].T/COP)+gamma_pred_el @ (1/1000*self.Ts/3600 * self.Pb[1,:].T/eff_EB)+ gamma*(self.y[0,self.N-1] -T_ref*casadi.MX.ones((1, 1)))**2 + self.T_slack@self.T_slack.T*alpha_slack)
-    
+        self.strategy.cost_expression(self, gamma_pred_gas, gamma_pred_el, alpha_slack, gamma_exp, gamma_slack)
+
     def mpc_controller(self, t,  T_C0, xk, uk, y_rnn, flag):
         """Solve the MPC optimization over the current prediction horizon.
 
@@ -963,13 +407,7 @@ class MPC:
                 self.opti.set_initial(self.Pb[i,:], Pb_initial)
             self.opti.set_initial(self.J, self.J_prec)
 
-            if self.Model == "BNNExp":
-                for i in range(self.n_out):
-                    self.opti.set_initial(self.sigmaK[:,i], 0.05*np.ones([self.N,1]))
-                self.opti.set_initial(self.slack_explo, np.zeros([self.n_out,self.N]))  #MODIFY - TUNING PARAMETER
-                self.opti.set_initial(self.slack_y, np.zeros([self.n_out, self.N]))
-            else:
-                self.opti.set_initial(self.slack_y, np.zeros([n_slack,1]))
+            self.strategy.warm_start_extra_variables(self)
 
             # Objective function is minimized over the horizon while respecting the current
             # model constraints. The optimization uses IPOPT as the underlying solver.
@@ -1003,14 +441,7 @@ class MPC:
                 u_pred = sol.value(self.u)
 
                 y_pred = sol.value(self.y)
-                if self.Model == 'BNNExp':
-                    slack = sol.value(self.slack_y)
-                    slack_explo = sol.value(self.slack_explo)
-                    sigma_pred = sol.value(self.sigmaK)
-                else:
-                    slack = np.zeros([n_slack, 1])
-                    slack_explo = 0
-                    sigma_pred = self.sigma_prec
+                slack, slack_explo, sigma_pred = self.strategy.extract_solution(self, sol)
                 Pb_pred=sol.value(self.Pb)
                 J_pred = sol.value(self.J)
                 y_nnarx=sol.value(self.y_nnarx)
@@ -1044,14 +475,7 @@ class MPC:
                     u_opt = sol.value(self.u[:, 0])
                     u_pred = sol.value(self.u)
                     y_pred = sol.value(self.y)
-                    if self.Model == 'BNNExp':
-                        slack = sol.value(self.slack_y)
-                        slack_explo = sol.value(self.slack_explo)
-                        sigma_pred = sol.value(self.sigmaK)
-                    else:
-                        slack = np.zeros([n_slack, 1])
-                        slack_explo = 0
-                        sigma_pred = self.sigma_prec
+                    slack, slack_explo, sigma_pred = self.strategy.extract_solution(self, sol)
                     Pb_pred = sol.value(self.Pb)
                     J_pred = sol.value(self.J)
                     y_nnarx = sol.value(self.y_nnarx)
@@ -1069,7 +493,7 @@ class MPC:
                     y_pred = self.y_prec
 
                     slack = np.zeros([n_slack,1])
-                    slack_explo = np.zeros([self.n_out, self.N]) if self.Model == 'BNNExp' else 0
+                    slack_explo = self.strategy.fallback_slack_explo(self)
 
                     Pb_pred=self.Pb_prec
                     J_pred = self.J_prec
@@ -1229,31 +653,11 @@ class MPC:
         # predicted output trajectory together with the estimated uncertainty term.
         states,outputs,Sigma=self.simulate_dynamics(k,initial_state, U[:,:], A, Bu, Bx, C, N,weights,n_states,ground_truth,theta)
 
-        if self.Model=='NNARX' or self.Model=='BNN' or self.Model=='BNNExp':
-            ### Denormalization Prediction ###
-            for i in range(n_out):
-                
-                for j in range(N):
-                       
-                        Y_RNN[i,j]=out_scale[i] * outputs[i,j]+out_bias[i]*np.ones([1, 1]) # * per prodotto scalare
-                        
-        ### GP Correction ###
-        elif self.Model=='GP':
-        
-        
-            output_gp=self.gaussian_process(k,ys,outputs,u_rnn.T,U,ground_truth)
-            output_gp=output_gp.transpose()
-            
-            ### Denormalization Prediction ###
-            for i in range(n_out):
-                
-                for j in range(N):
-                        r=(output_gp[i,j])
-                        #print(r.dtype)
-                        Y_pred[i,j]=out_scale[i] * r+out_bias[i]*np.ones([1, 1])
-                        Y_RNN[i,j]=out_scale[i] * outputs[i,j]+out_bias[i]*np.ones([1, 1]) # * per prodotto scalare
+        Y_pred, Y_RNN = self.strategy.predict_outputs(
+            self, k, outputs, ys, u_rnn, U, ground_truth,
+            out_scale, out_bias, n_out, N, Y_pred, Y_RNN
+        )
 
-                
         return Y_pred,Y_RNN, Sigma
 
     def activation_fun(self, input_vector, weights, state_vector, theta):
@@ -1268,9 +672,8 @@ class MPC:
         U0=U0
         b0=b0
         #weights dei due hidden layers
-        if self.Model=='NNARX' or self.Model=='GP' :
-            theta=casadi.vertcat(U0,b0)
-        
+        theta = self.strategy.select_theta(self, theta, U0, b0)
+
         W1 = weights['W.0'][0][0]
         W1=W1
         U1 = weights['U.0'][0][0]
@@ -1308,168 +711,15 @@ class MPC:
         # e=np.matmul(U0.transpose(),e_vect)
 
         # eta = e + np.transpose(b0.reshape(3,))
-        
+
         return eta,sigma
 
     def bayesian_correction(self, s, y_star, u):
         """Update the Bayesian last layer using recent data from the measured trajectory.
 
         This is the mechanism that adapts the model when the controller is operating
-        with uncertainty-aware corrections.
+        with uncertainty-aware corrections. Delegated to the active model strategy;
+        only BNNExp implements it.
         """
-        # This routine updates the adaptive last layer of the model online, using the
-        # recent measured trajectory as a Bayesian correction set. In practice it keeps
-        # track of a recursively updated precision matrix and recalculates the model
-        # output layer, which is then used during the next optimization cycle.
-        # sigma_epsilon2 = 0.005 #0.01  #MODIFIED - USO SELF.SIGMA_EPSILON2
+        return self.strategy.bayesian_correction(self, s, y_star, u)
 
-        L_prec=self.L_prev
-        Q_prec=self.Q_prev
-
-        ####  bayesian correction ###
-
-        data =(self.data)
-        layers= data['layers'][0, 0]  
-        weight=layers['weights']
-        weights=weight[0,0]
-        U0 = weights['U0'][0][0]
-        b0 = weights['b0'][0][0]
-        
-            
-        output_scaler=data['output_scaler']
-        output_scaler=output_scaler[0,0]
-        out_bias=output_scaler['bias']
-        out_bias=out_bias[0]
-        out_scale=output_scaler['scale']
-
-        out_scale=out_scale[0]
-        input_scaler=data['input_scaler']
-        input_scaler=input_scaler[0,0]
-        inp_bias=input_scaler['bias']
-        inp_bias=inp_bias[0]
-        inp_scale=input_scaler['scale']
-        inp_scale=inp_scale[0]
-        xk=np.zeros([s+1,3])
-        u_norm=np.zeros([5,s])
-        print(s)
-        #q_eb=3/3.6 #MODIFIED
-        q_eb = self.q_eb
-        n_out=3
-        #print(y_star[:,s])
-        for i in range(n_out): 
-            for j in range(s+1):
-                xk[j,i]=(y_star[i,j]-out_bias[i])/out_scale[i]
-        print(u[:,s-1])
-        for i in range(5): 
-            for j in range(s):
-
-                u_norm[i,j]=(u[i,j]-inp_bias[i])/inp_scale[i]
-                if i==4:
-                    u_norm[i,j]=(((u[4,j]*(y_star[2,j]-q_eb)+u[5,j]*q_eb)/y_star[2,j])-inp_bias[i])/inp_scale[i]
-        
-        
-        ####state vector
-        state=np.zeros([24,1])
-        k=s-1
-        state[0,:] =xk[k-2,0]
-        state[1,:] = (xk[k-2,1])
-        state[2,:] = (xk[k-2,2])
-        state[3,:] =(u_norm[0,k-2])
-        state[4,:] = (u_norm[1,k-2])
-        state[5,:] = (u_norm[2,k-2])
-        state[6,:] =(u_norm[3,k-2])
-        state[7,:] =u_norm[4,k-2]
-        state[8,:] = xk[k-1,0]
-        state[9,:] = xk[k-1,1]
-        state[10,:] = xk[k-1,2]
-        state[11,:] =(u_norm[0,k-1])
-        state[12,:] = (u_norm[1,k-1])
-        state[13,:] = (u_norm[2,k-1])
-        state[14,:] =(u_norm[3,k-1])
-        state[15,:] =(u_norm[4,k-1])
-        state[16,:] =xk[k,0]
-        state[17,:] = xk[k,1]
-        state[18,:] = xk[k,2]
-        state[19,:] = (u_norm[0,k])
-        state[20,:] =(u_norm[1,k])
-        state[21,:] =(u_norm[2,k])
-        state[22,:] =(u_norm[3,k])
-        state[23,:] =u_norm[4,k]
-
-        ### nnarx
-        W1 = weights['W.0'][0][0]
-        W1=W1
-        U1 = weights['U.0'][0][0]
-        U1=U1
-        b1 = weights['b.0'][0][0]
-        b1=b1
-
-        W2 = weights['W.1'][0][0]
-    
-        U2 = weights['U.1'][0][0]
-        
-        b2 = weights['b.1'][0][0]
-        
-    
-        n_neurons=9
-        z1=np.matmul(np.transpose(U1[:,:]),state)
-        print(z1.shape)
-        z2=np.matmul(np.transpose(W1[:,:]),u_norm[:,s-1]).reshape([9,1])
-        z3=(b1[:,:].reshape([n_neurons,1]))
-        z=z1+z2+z3
-        e1=np.tanh(z)
-        
-        z1=np.matmul(np.transpose(U2[:,:]),e1)
-    
-        z2=np.matmul(np.transpose(W2[:,:]),u_norm[:,s-1]).reshape([9,1])
-        
-        z3=(b2[:,:].reshape([n_neurons,1]))
-    
-        z_l2=z1+z2+z3
-        etaL=np.tanh(z_l2)
-        print(etaL.shape)
-
-        
-
-        f_tilde= np.vstack([etaL, 1]) #10x1
-        a=L_prec@f_tilde
-        #b=(f_tilde.T@L_prec)
-        denom = 1 + (f_tilde.T @ L_prec @ f_tilde).item()
-        
-        Lambda_inv=L_prec-(1/denom)*(a@a.T)#10x10
-        yk_star=(xk[s,:]).reshape([3,1])
-        Q=f_tilde@yk_star.T+Q_prec #10x3
-        #print((f_tilde@yk_star).shape) #ci deve essere corrispondeza temporale tra yk_star e f_tilde-> f_tilde è dell'istante precedente
-        theta_mean= Lambda_inv@Q #10x3
-        self.Q_prev=Q
-        self.L_prev=Lambda_inv
-        self.theta=theta_mean
-        self.sigma_bnn=np.sqrt((1+f_tilde.T@L_prec@f_tilde)*self.sigma_epsilon2)
-
-        return theta_mean #MODIFIED
-### to add in main mpc
-## nel caso dell bnn va chiamata prima la bayesian neural network e passata theta quella nuova calcolata
-### nel caso in cui non si usano le bayesain neural network theta deve essere associata a zero pi dentro la funziona verrà ridefinita
-# Param={
-#         "Ts":300,
-#         "N":12,
-#         "q_eb":3/3.6,
-#         "Tr_max": 66,
-#         "Tr_min": 45,
-#         "Ts_max": 80,
-#         "Ts_max_eb": 75,
-#         "Ts_min":65,
-#         "m_max":50,
-#         "m_min":2,
-#         "Pb_max":1e6,
-#         "Pb_min":1e3,
-#         "Pb_max_eb":1e6,
-#         "Pb_min_eb":1e3,
-#         "nnarx_mat": 'C:\\Users\\micky\\Desktop\\Poli\\IILM\\Tesi\\RSETEST\\OnlineLearning\\NNARX_9-9_H3_bs20_Ts300_Ns300_20251020_154518',
-#         "c_el": np.genfromtxt('C:\\Users\\micky\\Desktop\\Poli\\IILM\\Tesi\\NN_example_CERN\\ssnet\\MPC\\20250501_20250501_MGP_PrezziZonali_Nord.csv', delimiter=';', usecols=(2), skip_header=2),
-#         "Potenza":np.genfromtxt('ssnet\\Datasets\\DHN_LOAD\\DHN_ground_truth.csv', delimiter=',', usecols=(3,4,5,6), skip_header=28),#potenza all'istante k
-#         "Model":'GP',
-#         "T_C0":4,#istante in cui inizio ad applicare la legge di controllo
-#         "L_prev": np.eye(10),
-#         "Q_prev": np.zeros([10,3])
-#     }

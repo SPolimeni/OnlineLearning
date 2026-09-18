@@ -22,6 +22,12 @@ from influxdb_client.client.write_api import SYNCHRONOUS
 import concurrent.futures
 
 
+# ConfigData and Logs ship with this package, so they are resolved relative to
+# this file instead of the current working directory.
+_MODULE_DIR    = os.path.dirname(os.path.abspath(__file__))
+CONFIG_DATA_DIR = os.path.join(_MODULE_DIR, 'ConfigData')
+LOG_DATA_DIR    = os.path.join(_MODULE_DIR, 'Logs')
+
 
 ##################
 # InfluxDB Class #
@@ -41,7 +47,7 @@ class InfluxDB_connect:
       self.ExecutedWriting       = 0
 
       # List of all nodes to read and their corresponding metadata
-      ConfigDataPath = os.path.join(os.getcwd(),'utils','InfluxDB','ConfigData')
+      ConfigDataPath = CONFIG_DATA_DIR
       FileName       = 'DBdataConfig.json'
       with open(os.path.join(ConfigDataPath,FileName), 'r') as file:
          DBdataConfig = json.load(file)
@@ -122,7 +128,7 @@ class OPCUA_connect:
       self.verbose            = 0
 
       # List of all nodes to read and their corresponding metadata
-      ConfigDataPath = os.path.join(os.getcwd(),'utils','InfluxDB','ConfigData')
+      ConfigDataPath = CONFIG_DATA_DIR
       FileName  = 'DBdataConfig.json'
       with open(os.path.join(ConfigDataPath,FileName), 'r') as file:
          self.DBdataConfig = json.load(file)
@@ -337,7 +343,8 @@ class OPCUA_connect:
 #######################
 
 def LogError(error_msg):
-   LogDataPath = os.path.join(os.getcwd(),'utils','InfluxDB','Logs')
+   LogDataPath = LOG_DATA_DIR
+   os.makedirs(LogDataPath, exist_ok=True)
    Date = dt.now()
    timezone = pytz.timezone('Europe/Rome')
    Date_tz = timezone.localize(Date)

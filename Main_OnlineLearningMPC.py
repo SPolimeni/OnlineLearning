@@ -5,6 +5,15 @@ updates the model-based optimization loop, and either sends setpoints to the liv
 plant or feeds the FMU-based simulation path during debug execution.
 """
 
+import os
+import sys
+
+# The project modules live under src/ while this entry point stays at the
+# repository root, so src/ is put on the import path before the project imports
+# below. This keeps `python Main_OnlineLearningMPC.py` working from the root
+# without any installation step.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src'))
+
 import numpy as np
 import csv
 import argparse
@@ -18,7 +27,6 @@ from class_MPC import MPC
 from utils.DERTF_StatesDefinition       import main_status_readings
 from utils.OPCUA.DERTF_SetPointsWriter  import OPCUA_SetPoint
 from utils.DataManagement               import SaveAggregatedData
-import os
 import platform
 from project_paths import data_file
 
@@ -127,10 +135,6 @@ def SetPointsToDERTF(Solved=True):
         if controller.SetPointsWriter.DataMap['T_out_EB']['Value'] < 45:
             controller.SetPointsWriter.DataMap['T_out_EB']['Value'] = 72
 
-        if controller.Param['Model'] == 'Benchmark':
-            controller.SetPointsWriter.DataMap['T_out_GB']['Value']  = 73
-            controller.SetPointsWriter.DataMap['T_out_EB']['Value']  = 70
-
     except Exception as e:
         tb = traceback.extract_tb(e.__traceback__)
         if tb:
@@ -227,7 +231,7 @@ def MPC_solve():
 
     try:
 
-        if controller.Param['Model']=='BNN' or controller.Param['Model']=='BNNExp':
+        if controller.Param['Model']=='BNNExp':
             if k > controller.Param["T_C0"]-1:
                 controller.theta_current = controller.bayesian_correction(k,controller.y_out,controller.u_out) #MODIFIED 
                 controller.theta_history[k,:,:] = controller.theta_current #MODIFIED
@@ -395,7 +399,8 @@ if __name__ == "__main__":
         "--Model",
         type=str,
         default='GP',
-        help="Set the model type: 'NNARX', 'GP', or 'BNN' or 'BNNExp' or 'Benchmark'",
+        choices=['NNARX', 'GP', 'BNNExp'],
+        help="Set the model type: 'NNARX', 'GP', or 'BNNExp'",
     )
     parser.add_argument(
         "--Debug",

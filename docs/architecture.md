@@ -15,8 +15,9 @@ The system is organized around a model-predictive control loop. At a high level,
 The most important files are:
 
 - [Main_OnlineLearningMPC.py](../Main_OnlineLearningMPC.py): runtime entry point and orchestration logic
-- [class_MPC.py](../class_MPC.py): core control and optimization implementation
-- [utils](../utils): support code for data handling, state definition, and integration
+- [src/class_MPC.py](../src/class_MPC.py): core control and optimization implementation
+- [src/model_strategies.py](../src/model_strategies.py): per-model strategies (NNARX, GP, BNNExp)
+- [src/utils](../src/utils): support code for data handling, state definition, and integration
 - [NNmodels](../NNmodels): trained or stored model files
 - [FMUs](../FMUs): simulation models used in the debug path
 

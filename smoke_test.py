@@ -4,11 +4,15 @@ import sys
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 
+# The project modules live under src/; mirror the bootstrap used by the
+# runnable entry points so the modules below can be imported.
+sys.path.insert(0, os.path.join(ROOT, 'src'))
+
 PROJECT_FILES = [
     'class_MPC',
-    'Main_OnlineLearningMPC',
-    'MPC_BNNExp_TestParameters',
+    'model_strategies',
     'project_paths',
+    'Main_OnlineLearningMPC',
 ]
 
 

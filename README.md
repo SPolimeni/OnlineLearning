@@ -5,8 +5,8 @@ This repository contains a model-predictive control (MPC) application for a ther
 The project combines several elements that are visible in the codebase:
 
 - a real-time controller loop in [Main_OnlineLearningMPC.py](Main_OnlineLearningMPC.py)
-- the main controller implementation in [class_MPC.py](class_MPC.py)
-- support utilities in [utils](utils)
+- the main controller implementation in [src/class_MPC.py](src/class_MPC.py)
+- support utilities in [src/utils](src/utils)
 - an FMU simulation path for debugging and validation
 - live measurement and actuation integrations via InfluxDB and OPC UA
 - output files written to the [Solutions](Solutions) directory
@@ -26,11 +26,11 @@ This file acts as the runtime entry point and orchestration layer. It:
 
 The main block is the place where the project decides whether it is running in debug mode or live deployment mode.
 
-### class_MPC.py
+### src/class_MPC.py
 This file contains the main controller logic. It loads the model, initializes prediction buffers, exposes the optimization-related state, and defines the control logic used to compute a feasible action sequence. This is the core of the system.
 
-### utils
-The [utils](utils) directory contains support modules for:
+### src/utils
+The [src/utils](src/utils) directory contains support modules for:
 
 - reading operational state variables
 - writing setpoints to the target system
@@ -50,20 +50,24 @@ The system repeatedly solves a constrained optimization problem during each cont
 
 The repository currently contains both source code and research/runtime artifacts. The main folders and files are:
 
+The runnable entry points stay at the repository root; all importable source code
+lives under `src/`, which the entry points add to the import path.
+
 - [Main_OnlineLearningMPC.py](Main_OnlineLearningMPC.py): main controller application entry point
-- [Main_OnlineLearningMPC_debug.py](Main_OnlineLearningMPC_debug.py): debug-oriented runtime variant
-- [class_MPC.py](class_MPC.py): core MPC implementation
-- [simulazioneMPC.py](simulazioneMPC.py): simulation-oriented script
-- [MPC_BNNExp_TestParameters.py](MPC_BNNExp_TestParameters.py): parameter/test configuration script
 - [PostProcessing_Solutions.py](PostProcessing_Solutions.py): post-processing utilities for generated solution outputs
-- [utils](utils): integration and helper modules
+- [smoke_test.py](smoke_test.py): lightweight import check of the project modules
+- [src](src): the project source code
+  - [class_MPC.py](src/class_MPC.py): core MPC implementation
+  - [model_strategies.py](src/model_strategies.py): per-model strategies (NNARX, GP, BNNExp)
+  - [project_paths.py](src/project_paths.py): repository-stable paths to runtime data
+  - [utils](src/utils): integration and helper modules, including the bundled input data
 - [NNmodels](NNmodels): trained or stored neural-network model files
 - [FMUs](FMUs): FMU model files used in simulation/debug mode
 - [Solutions](Solutions): output directory used to store result files generated during execution
-- [LogsFolder](LogsFolder): runtime log files
 - [docs](docs): project documentation
-- [archive](archive): legacy or non-primary project artifacts separated during cleanup
 - [env](env): local environment/dependency directory, typically not intended for public source control
+
+`LogsFolder` is created at runtime for exception logs and is not tracked.
 
 ## Prerequisites
 
@@ -159,7 +163,7 @@ For a local simulated loop:
 python Main_OnlineLearningMPC.py --Debug --Model GP
 ```
 
-The repository writes output files under [Solutions](Solutions) during execution, which is consistent with the data management utilities in [utils/DataManagement.py](utils/DataManagement.py).
+The repository writes output files under [Solutions](Solutions) during execution, which is consistent with the data management utilities in [src/utils/DataManagement.py](src/utils/DataManagement.py).
 
 ## Contributing
 

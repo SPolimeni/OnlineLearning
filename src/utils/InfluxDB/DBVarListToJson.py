@@ -1,6 +1,4 @@
-import sys
 import os
-sys.path.append(os.getcwd())
 
 from openpyxl import load_workbook
 import json
@@ -10,7 +8,9 @@ os_name = platform.system()
 import pandas as pd
 
 
-ConfigDataPath = os.path.join(os.getcwd(),'utils','InfluxDB','ConfigData')
+# ConfigData sits next to this script inside the package, so it is resolved
+# relative to this file rather than the current working directory.
+ConfigDataPath = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ConfigData')
 Opts = { # In the xlsx file there are the list of all the sensors/quantities of interest linked to the NodeID name in OPCUA 
         'xlsx_InputFileName_Readings'   : 'Variabili_Database_Influx.xlsx', 
         'json_OutputFileName_Readings'  : 'DBdataConfig.json',

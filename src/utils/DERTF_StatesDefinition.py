@@ -1,9 +1,4 @@
-import os
-import sys
-root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-sys.path.append(root_path)
-
-from utils.InfluxDB.InfluxDB_mgmt import InfluxDB_connect
+from .InfluxDB.InfluxDB_mgmt import InfluxDB_connect
 import casadi as ca
 
 def SettingUpInfluxDBconnection():
