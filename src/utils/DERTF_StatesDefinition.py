@@ -20,9 +20,9 @@ def CheckInfluxDBconnection(InfluxDB_connector):
 
 def SimpleStatusReadings(InfluxDB_connector):
     """
-    Legge Tin, Tout, FlowRate, Power per ciascun sistema da InfluxDB.
+    Read Tin, Tout, FlowRate, and Power for each system from InfluxDB.
     Tin = TT*1, Tout = TT*2, FlowRate = FT*1, Power = Power*
-    Restituisce: {sistema: {'T_in_sol': val, 'T_out_sol': val, 'm_sol': val, 'Power': val}}
+    Return: {system: {'T_in_sol': val, 'T_out_sol': val, 'm_sol': val, 'Power': val}}
     """
     Bucket = InfluxDB_connector.Bucket
     timeRead = f"-{5}m"
@@ -87,7 +87,7 @@ def main_status_readings():
     InfluxDB_connector = SettingUpInfluxDBconnection()
 
     if not CheckInfluxDBconnection(InfluxDB_connector):
-        print("Connessione a InfluxDB fallita.")
+        print("InfluxDB connection failed.")
         exit()
 
     
@@ -114,7 +114,7 @@ if __name__ == "__main__":
     InfluxDB_connector = SettingUpInfluxDBconnection()
 
     if not CheckInfluxDBconnection(InfluxDB_connector):
-        print("Connessione a InfluxDB fallita.")
+        print("InfluxDB connection failed.")
         exit()
 
     y_dict = SimpleStatusReadings(InfluxDB_connector)

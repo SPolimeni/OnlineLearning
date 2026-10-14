@@ -1,178 +1,130 @@
-# Project Overview
+# OnlineLearning MPC
 
-This repository contains a model-predictive control (MPC) application for a thermal/control system. Based on the source code, it appears to target a district-heating or thermal-energy context, with a control loop that reads current measurements, predicts future behavior using a neural-network-based model, and selects control actions over a receding horizon.
+## Overview
 
-The project combines several elements that are visible in the codebase:
+OnlineLearning is a research-oriented model-predictive control (MPC) application for a thermal or district-heating plant. It predicts plant behavior over a receding horizon, solves a constrained optimization problem, applies the first control move, and repeats the cycle.
 
-- a real-time controller loop in [Main_OnlineLearningMPC.py](Main_OnlineLearningMPC.py)
-- the main controller implementation in [src/class_MPC.py](src/class_MPC.py)
-- support utilities in [src/utils](src/utils)
-- an FMU simulation path for debugging and validation
-- live measurement and actuation integrations via InfluxDB and OPC UA
-- output files written to the [Solutions](Solutions) directory
+## Scientific purpose
 
-This appears to be a research-oriented control application rather than a general-purpose library. The code is structured around a highly specific plant model and operating scenario, and the current repository layout reflects an internal/prototype workflow more than a fully polished public package.
+The controller evaluates online-learning model strategies for thermal control. The repository contains an offline/debug route based on a functional mock-up unit (FMU) and a live route that reads plant measurements and writes setpoints through deployment-specific services.
 
-## Architecture Overview
+## Methodology
 
-### Main_OnlineLearningMPC.py
-This file acts as the runtime entry point and orchestration layer. It:
+At each control step, the runtime reads the current state, optionally updates the Bayesian model state, solves the MPC problem with CasADi and IPOPT, records predictions and diagnostics, and applies the first control action. The horizon uses the configured prediction length and move blocking. The parameter values, equations, constraints, units, timing, and model assets are scientific inputs and must not be inferred from this guide alone; see [public architecture documentation](docs/public/architecture.md) and the source configuration.
 
-- configures the operating parameters for the control system
-- parses command-line options such as model type and debug mode
-- initializes the controller instance
-- reads plant measurements from the live system or from debug data
-- runs the optimization loop and writes setpoints to the plant or simulation layer
+## Repository architecture
 
-The main block is the place where the project decides whether it is running in debug mode or live deployment mode.
+- [Main_OnlineLearningMPC.py](Main_OnlineLearningMPC.py) is the command-line entry point.
+- [src/config/parameters.py](src/config/parameters.py) builds the parameter dictionary and loads bundled CSV inputs.
+- [src/runtime/controller_runner.py](src/runtime/controller_runner.py) owns the control loop, debug/live selection, I/O, persistence, and exception logging.
+- [src/class_MPC.py](src/class_MPC.py) builds and solves the optimization problem.
+- [src/model_strategies.py](src/model_strategies.py) implements model-specific behavior.
+- [NNmodels](NNmodels) contains MAT model files; [FMUs](FMUs) contains debug FMUs.
+- [Solutions](Solutions) receives run outputs. `LogsFolder/` is created for exception logs.
 
-### src/class_MPC.py
-This file contains the main controller logic. It loads the model, initializes prediction buffers, exposes the optimization-related state, and defines the control logic used to compute a feasible action sequence. This is the core of the system.
+For the detailed data and control flow, see the [public architecture documentation](docs/public/architecture.md).
 
-### src/utils
-The [src/utils](src/utils) directory contains support modules for:
+## Supported model strategies
 
-- reading operational state variables
-- writing setpoints to the target system
-- saving aggregated results and controller outputs
-- managing integration with external data sources such as InfluxDB
+The `--Model` option accepts `NNARX`, `GP`, or `BNNExp`; the default is `GP`.
 
-### FMU layer
-The code includes a debug path that loads a Functional Mock-up Unit (FMU) using pyFMI. This is used to simulate plant behavior without using the live industrial process.
+- `NNARX` uses the neural-network autoregressive prediction strategy.
+- `GP` adds a Gaussian-process correction based on buffered residuals.
+- `BNNExp` updates a Bayesian last layer and includes uncertainty-aware exploration behavior.
 
-### Neural network layer
-The project loads a MAT file from [NNmodels](NNmodels) and extracts hyperparameters from the stored model. The code then uses those values to inform the predicted plant response and the optimization logic.
+## Requirements
 
-### Optimization layer
-The system repeatedly solves a constrained optimization problem during each controller cycle. The results are used to decide the current control move while respecting plant operating limits and model predictions.
-
-## Repository Structure
-
-The repository currently contains both source code and research/runtime artifacts. The main folders and files are:
-
-The runnable entry points stay at the repository root; all importable source code
-lives under `src/`, which the entry points add to the import path.
-
-- [Main_OnlineLearningMPC.py](Main_OnlineLearningMPC.py): main controller application entry point
-- [PostProcessing_Solutions.py](PostProcessing_Solutions.py): post-processing utilities for generated solution outputs
-- [smoke_test.py](smoke_test.py): lightweight import check of the project modules
-- [src](src): the project source code
-  - [class_MPC.py](src/class_MPC.py): core MPC implementation
-  - [model_strategies.py](src/model_strategies.py): per-model strategies (NNARX, GP, BNNExp)
-  - [project_paths.py](src/project_paths.py): repository-stable paths to runtime data
-  - [utils](src/utils): integration and helper modules, including the bundled input data
-- [NNmodels](NNmodels): trained or stored neural-network model files
-- [FMUs](FMUs): FMU model files used in simulation/debug mode
-- [Solutions](Solutions): output directory used to store result files generated during execution
-- [docs](docs): project documentation
-- [env](env): local environment/dependency directory, typically not intended for public source control
-
-`LogsFolder` is created at runtime for exception logs and is not tracked.
-
-## Prerequisites
-
-This project is a research/industrial control application and depends on a specific scientific stack. Before running it, create the Conda environment defined in [environment.yml](environment.yml), which includes:
-
-- Python 3.10+
-- NumPy, SciPy
-- CasADi
-- PyTorch / GPyTorch (depending on the model path)
-- pyFMI for FMU-based simulation
-- OPC UA / InfluxDB support if using the live-plant path
-
-The repository also assumes a local Windows-oriented setup for the industrial deployment path.
+The declared environment requires Conda, Windows-oriented FMU support, Python 3.10, NumPy, SciPy, pandas, CasADi, PyTorch, GPyTorch, APScheduler, pyFMI, InfluxDB client support, and OPC UA support. Exact core package declarations are in [environment.yml](environment.yml). `openpyxl` is optional and is used only by the private Excel-to-JSON metadata conversion utility. FMU execution depends on native pyFMI/Assimulo components and is not claimed to be platform independent.
 
 ## Installation
 
-From PowerShell, create the local Conda environment and activate it:
+Run these commands from the repository root in Windows PowerShell:
 
 ```powershell
 conda env create --prefix .\env --file environment.yml
 conda activate .\env
 ```
 
-The Conda environment must be active before running scripts that use PyFMI. PyFMI relies on native dependencies, including FMILibrary and Assimulo, supplied by `conda-forge`. In VS Code, select `env\python.exe` as the Python interpreter.
-
-To update an existing local environment after `environment.yml` changes:
+For an existing environment:
 
 ```powershell
 conda env update --prefix .\env --file environment.yml --prune
 ```
 
-Further installation notes are available in [docs/Istruzioni_installazione.txt](docs/Istruzioni_installazione.txt).
+Select `env\python.exe` in VS Code when using the repository-local environment. The checked-in `env/` directory is a local environment artifact, not a substitute for a clean installation or a record of redistribution rights.
 
-## Quick Start
+## Quick start
 
-The minimum steps to run the application are:
-
-1. Create the Conda environment from `environment.yml`.
-2. Activate it with `conda activate .\env`.
-3. Run the main controller script:
-
-```powershell
-python Main_OnlineLearningMPC.py --Model GP
-```
-
-4. If you want to run the debug/simulation route:
-
-```powershell
-python Main_OnlineLearningMPC.py --Debug --Model GP
-```
-
-The command-line interface in [Main_OnlineLearningMPC.py](Main_OnlineLearningMPC.py) supports the `--Model` and `--Debug` switches.
-
-## Fast smoke validation
-
-Before a longer run, use the lightweight repository check:
+From the repository root, run the import smoke test:
 
 ```powershell
 python smoke_test.py
 ```
 
-This validates the project root and key Python files without starting the controller loop.
+To select a strategy, pass `--Model NNARX`, `--Model GP`, or `--Model BNNExp`. Use `--Debug` for the FMU route described below.
 
-## Execution Modes
+## Debug simulation
 
-### Debug mode
-The debug mode path is enabled with the `--Debug` option. In this mode, the code loads an FMU and runs a simulated control loop. This mode appears intended for testing the controller behavior without interacting with the live plant.
-
-### FMU simulation mode
-This is effectively the same simulation path used in debug mode. The FMU receives the control actions generated by the optimization loop and returns system outputs that are used to update the controller state.
-
-### Live deployment mode
-When debug mode is not active, the project appears to connect to a live system through:
-
-- InfluxDB for obtaining measurements
-- OPC UA for writing setpoints to the plant
-
-This mode is more operational and depends on external infrastructure that is not fully abstracted away from the code.
-
-## Usage Example
-
-A typical execution workflow is:
-
-```powershell
-conda env create --prefix .\env --file environment.yml
-conda activate .\env
-python Main_OnlineLearningMPC.py --Model GP
-```
-
-For a local simulated loop:
+The debug command is an FMU simulation and does not intentionally use the live InfluxDB or OPC UA path:
 
 ```powershell
 python Main_OnlineLearningMPC.py --Debug --Model GP
 ```
 
-The repository writes output files under [Solutions](Solutions) during execution, which is consistent with the data management utilities in [src/utils/DataManagement.py](src/utils/DataManagement.py).
+The runner loads `FMUs/DHN_MC_V3_FMU_EB_60.fmu`, seeds startup buffers, executes the controller loop, and feeds generated controls back to the FMU. pyFMI support is Windows-dependent in the current implementation. This command is a debug simulation, not proof of numerical reproduction of published results; no fixed trajectory baseline, FMU hash, or full provenance record is currently documented.
 
-## Contributing
+## Live plant execution
 
-Please refer to [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidance, expected workflows, branch practices, and coding/documentation expectations.
+Without `--Debug`, the process enters the live runtime path and remains active until interrupted:
+
+```powershell
+python Main_OnlineLearningMPC.py --Model GP
+```
+
+The live path reads status through InfluxDB and writes control setpoints through OPC UA. It requires deployment-specific credentials, endpoints, node mappings, network access, and plant approval. Do not publish credentials, tokens, internal hostnames, certificates, node identifiers, or other infrastructure metadata. No public installation can be considered live-ready without an approved deployment configuration.
+
+## Input data and trained models
+
+The parameter builder loads bundled CSV files from `src/utils/data/`, including electricity-price and heat-load data. The default neural model is `NNmodels/net_1020.mat`; additional MAT files and model directories are present in `NNmodels/`. The selected model, input ordering, normalization, units, and asset provenance must be recorded with any scientific run. Redistribution rights and checksums for the data, MAT files, and FMUs have not been established in this repository.
+
+## Outputs and result files
+
+Runs append CSV and pickle files below `Solutions/<Model>/<ddmm>/`, including measured and predicted outputs, recurrent predictions, control actions, boiler predictions, slacks, exploration, cost, computation time, feasibility status, configuration, and Bayesian `theta`/`sigma` state. The run timestamp is included in filenames. Exceptions are appended to `LogsFolder/Exceptions.log`. These repository locations are resolved from the source tree; launch commands from the repository root are still recommended because the entry-point import path is configured there.
+
+## Reproducing the published results
+
+Three reproducibility levels are currently distinguishable:
+
+1. **Source and import inspection:** read the documented architecture and inspect source, models, FMUs, and bundled inputs. This requires no runtime integration.
+2. **Smoke test:** run `python smoke_test.py` in the declared environment. This checks imports and project wiring; it does not validate optimization results or FMU trajectories.
+3. **FMU debug simulation:** run the `--Debug` command on a supported Windows environment with the required FMU and dependencies. This exercises the controller and simulation path, but exact article reproduction remains unverified because fixed fixtures, asset provenance, environment capture, and expected numerical baselines are missing.
+
+Live plant execution is not a reproducibility level. It requires private infrastructure and must be validated only in an approved isolated deployment.
+
+## Tests and validation
+
+The available `smoke_test.py` is an import check. The repository does not currently establish tests for optimization feasibility, first control moves, fallback status, strategy-specific behavior, Bayesian updates, exploration, or FMU trajectories. A publication release should add owner-approved fixtures, tolerances, environment records, asset hashes, and representative debug baselines before claiming article-level reproduction.
+
+## Known limitations
+
+The application is plant-specific, uses hard-coded runtime parameters, and depends on mutable model state for GP and BNNExp. The live path is deployment-specific. Licensing, provenance, redistribution rights, and anonymization status for several artifacts remain unresolved.
+
+## Security and configuration notes
+
+Never commit credentials or private endpoints. Review live connector configuration, node maps, logs, generated solutions, model files, FMUs, and bundled data before redistribution. Debug execution should be used for local validation; do not run the live command against an unknown or unapproved plant.
+
+## Citation
+
+Citation metadata, authorship, DOI, and a `CITATION.cff` file are not yet provided. Add owner-approved bibliographic metadata before public release.
 
 ## License
 
-A license has not yet been selected for this repository. Before public publication, a project owner should choose an appropriate open-source license and add it to the repository root.
+No repository license has been identified. The project owner must select and publish a license, and separately confirm redistribution rights for models, FMUs, data, and generated results.
 
----
+## Contributing
 
-This README reflects the repository as it exists in source code today. Where the repository does not yet provide a fully public-ready workflow, the text clearly distinguishes the confirmed behavior from the operational assumptions inferred from the code.
+See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md). Contributions that affect scientific behavior require review of timing, units, equations, constraints, model ordering, solver behavior, and reproducibility evidence.
+
+## Contact
+
+No public maintainer or contact address is specified in the repository. Add an owner-approved contact before publication.

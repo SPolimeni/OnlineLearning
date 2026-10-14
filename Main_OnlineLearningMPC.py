@@ -13,8 +13,16 @@ from runtime.controller_runner import ControllerRunner
 
 
 def parse_args(argv=None):
-    """Parse command-line options for the runtime entry point."""
-    parser = argparse.ArgumentParser(description="Run script in debug or normal mode")
+    """Parse command-line options for the runtime entry point.
+
+    Args:
+        argv: Optional argument sequence. When omitted, ``argparse`` reads the
+            process command line.
+
+    Returns:
+        The parsed model-selection and debug-mode options.
+    """
+    parser = argparse.ArgumentParser(description="Run the controller in offline debug mode")
     parser.add_argument(
         "--Model",
         type=str,
@@ -25,15 +33,31 @@ def parse_args(argv=None):
     parser.add_argument(
         "--Debug",
         action="store_true",
-        default=False,
-        help="Run the script in debug mode with simulated data with FMU",
+        default=True,
+        help="Run the script in debug mode with simulated FMU data (default)",
     )
-    return parser.parse_args(argv)
+    parser.add_argument(
+        "--Live",
+        action="store_true",
+        help="Request the retained live integration boundary; public live operation is disabled",
+    )
+    args = parser.parse_args(argv)
+    args.Debug = not args.Live
+    return args
 
 
 def main(argv=None):
-    """Parse options, build parameters, and start the selected runtime."""
-    args        = parse_args(argv)
+    """Build the selected controller configuration and start its runtime.
+
+    Debug mode is the safe public default. Live mode is retained only as an
+    explicit, disabled implementation boundary.
+    """
+    args = parse_args(argv)
+    if not args.Debug:
+        raise RuntimeError(
+            "Live integration is illustrative and read-only; it is not enabled "
+            "for public execution."
+        )
     parameters  = build_parameters(args.Model)
     ControllerRunner(parameters, debug=args.Debug).run()
 

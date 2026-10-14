@@ -6,9 +6,11 @@ from opcua.ua.uaerrors import UaStatusCodeError
 import io
 import warnings
 
+from deployment_config import OPCUA_SERVER_URL
+
 class OPCUA_SetPoint:
     def __init__(self, **kwargs):
-        self.server_url = "opc.tcp://xxx.xxx.xxx.xxxx:4840/freeopcua/server/" 
+        self.server_url = kwargs.get("server_url", OPCUA_SERVER_URL)
         self.connected = False
         self.connect()
 
@@ -68,7 +70,7 @@ class OPCUA_SetPoint:
             nodeid = row['NodeID']
             datatype = row['DATA TYPE']
             if name not in values_dict:
-                warnings.warn(f"Attenzione: '{name}' non trovato nei risultati per {system}, salto.")
+                warnings.warn(f"Warning: '{name}' was not found in the results for {system}; skipping.")
                 continue
             value = values_dict[name]
             node_data.append({'NodeID': nodeid, 'Value': value, 'DataType': datatype})

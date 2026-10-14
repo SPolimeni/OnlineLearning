@@ -1,94 +1,94 @@
-# Checklist di pubblicazione e handoff del repository
+# Repository publication and handoff checklist
 
-## 1) Release base
-- [ ] Aggiungere una licenza open-source corretta, es. MIT / Apache 2.0
-- [ ] Creare una documentazione pubblica minima:
-  - overview del progetto
-  - installazione
-  - prerequisiti
-  - architettura
-  - workflow di esecuzione
-  - limitazioni note
-- [ ] Verificare che il README non contenga riferimenti troppo specifici al setup locale
-- [ ] Separare chiaramente:
-  - codice sorgente
-  - dati / modelli / esempi
-  - artefatti generati
-  - file di utility e supporto
+## 1) Base release
+- [ ] Add an appropriate open-source license, such as MIT / Apache 2.0
+- [ ] Create minimal public documentation:
+  - project overview
+  - installation
+  - prerequisites
+  - architecture
+  - execution workflow
+  - known limitations
+- [ ] Verify that the README does not contain overly specific references to the local setup
+- [ ] Clearly separate:
+  - source code
+  - data / models / examples
+  - generated artifacts
+  - utility and support files
 
-## 2) Configurazione e path
-- [ ] Centralizzare la configurazione in un unico punto
-- [ ] Usare un resolver di path robusto, basato su root del repo o config
-- [ ] Rimuovere dipendenze da cartelle locali non standard dove possibile
-- [ ] Aggiungere controlli iniziali:
-  - file obbligatori presenti
-  - modello caricato
-  - dati disponibili
-  - solver / dipendenze accessibili
-- [ ] Documentare chiaramente i casi live vs debug vs test
+## 2) Configuration and paths
+- [ ] Centralize configuration in one location
+- [ ] Use a robust path resolver based on the repository root or configuration
+- [ ] Remove dependencies on non-standard local folders where possible
+- [ ] Add initial checks for:
+  - required files being present
+  - the model being loaded
+  - data being available
+  - the solver / dependencies being accessible
+- [ ] Clearly document live vs debug vs test cases
 
-## 3) Stabilità del codice
-- [ ] Convalidare sempre le dimensioni dei vettori di stato/ingresso/uscita
-- [ ] Inserire guard check per:
-  - bounds dei parametri
-  - vincoli di ottimizzazione
-  - dimensione del problema
-  - presenza di dati mancanti
-- [ ] Verificare che il solver abbia fallback chiari ed errori leggibili
-- [ ] Evitare logica nascosta in script di esecuzione troppo “magica”
+## 3) Code stability
+- [ ] Always validate the dimensions of state/input/output vectors
+- [ ] Add guard checks for:
+  - parameter bounds
+  - optimization constraints
+  - problem size
+  - missing data
+- [ ] Verify that the solver has clear fallbacks and readable errors
+- [ ] Avoid hidden logic in overly "magical" execution scripts
 
-## 4) Test e validazione
-- [ ] Aggiungere una smoke test minima:
-  - import dei moduli principali
-  - compilazione Python dei file critici
-  - caricamento configurazione
-  - validazione di un path di esempio
-- [ ] Aggiungere test per:
-  - parsing dei dati
+## 4) Testing and validation
+- [ ] Add a minimal smoke test for:
+  - importing the main modules
+  - compiling critical Python files
+  - loading the configuration
+  - validating an example path
+- [ ] Add tests for:
+  - data parsing
   - path resolution
-  - validazione input/metadata
-  - comportamento di fallback del solver
-- [ ] Eseguire un controllo di regressione sulla sintassi dei file principali
+  - input/metadata validation
+  - solver fallback behavior
+- [ ] Run a syntax regression check on the main files
 
-## 5) Ambiente e riproducibilità
-- [ ] Creare un ambiente pinato con dipendenze note
-- [ ] Includere i prerequisiti minimi per:
+## 5) Environment and reproducibility
+- [ ] Create a pinned environment with known dependencies
+- [ ] Include the minimum prerequisites for:
   - CasADi
-  - PyTorch / GPyTorch / altre dipendenze modello
+  - PyTorch / GPyTorch / other model dependencies
   - FMU / OPC UA / solver
-- [ ] Documentare chiaramente i requisiti di sistema
-- [ ] Specificare quali componenti sono obbligatori e quali sono opzionali
+- [ ] Clearly document system requirements
+- [ ] Specify which components are required and which are optional
 
 ## 6) Repository hygiene
-- [ ] Escludere artefatti generati da tracking
-- [ ] Fare pulizia finale di file legacy o duplicati
-- [ ] Mantenere una sola “fonte di verità” per dati di esempio e modelli
-- [ ] Verificare che i file root non contengano dati di runtime non organizzati
-- [ ] Separare i risultati sperimentali dagli asset di progetto
+- [ ] Exclude generated artifacts from version control
+- [ ] Perform a final cleanup of legacy or duplicate files
+- [ ] Maintain a single "source of truth" for example data and models
+- [ ] Verify that root files do not contain unorganized runtime data
+- [ ] Separate experimental results from project assets
 
-## 7) Documentazione operativa
-- [ ] Scrivere una quickstart chiara in 5–10 minuti
-- [ ] Scrivere una sezione “Known limitations”
-- [ ] Documentare:
-  - come avviare il run live
-  - come usare la modalità debug
-  - come interpretare output / log
-  - come riconoscere failure del solver o dati invalidi
-- [ ] Indicare esplicitamente dove le assunzioni di impianto sono forti
+## 7) Operational documentation
+- [ ] Write a clear 5–10 minute quickstart
+- [ ] Write a "Known limitations" section
+- [ ] Document:
+  - how to start a live run
+  - how to use debug mode
+  - how to interpret outputs / logs
+  - how to identify solver failures or invalid data
+- [ ] Explicitly identify where plant assumptions are strong
 
-## 8) Pubblicazione / handoff finale
-- [ ] Verificare che la repo sia presentabile a un collega senza il setup originale
-- [ ] Aggiungere un documento di onboarding per nuovo maintainer
-- [ ] Aggiungere un file di changelog minimo
-- [ ] Preparare una nota “what this project is / is not”
-- [ ] Fare una verifica finale: build / import / compile / smoke test
+## 8) Publication / final handoff
+- [ ] Verify that the repository can be presented to a colleague without the original setup
+- [ ] Add an onboarding document for a new maintainer
+- [ ] Add a minimal changelog
+- [ ] Prepare a "what this project is / is not" note
+- [ ] Perform a final check: build / import / compile / smoke test
 
-## Priorità realistica
-Se si vuole fare il passaggio minimo ma utile, le prime 4 cose da fare sono:
+## Realistic priority
+For a minimal but useful transition, the first four tasks are:
 
-1. Licenza
-2. Quickstart + prerequisiti
-3. Config/path centralizzati
+1. License
+2. Quickstart + prerequisites
+3. Centralized configuration/paths
 4. Smoke test / py_compile / import check
 
-Queste danno il maggiore beneficio senza rischiare di cambiare la logica di controllo.
+These provide the greatest benefit without risking changes to the control logic.

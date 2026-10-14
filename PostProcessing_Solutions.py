@@ -117,7 +117,7 @@ def load_measurement_csvs(solution_folder, filename_prefix='', parse_dates=None,
         if merged is None:
             merged = df
         else:
-            # Mantieni solo le colonne nuove che non sono già presenti
+            # Keep only new columns that are not already present.
             new_cols = [col for col in df.columns if col not in merged.columns]
             if new_cols:
                 merged = merged.join(df[new_cols], how='outer')

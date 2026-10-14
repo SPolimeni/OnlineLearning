@@ -1,14 +1,23 @@
 """Runtime parameter construction for the online-learning MPC controller."""
 
-import os
-
 import numpy as np
 
-from project_paths import data_file
+from project_paths import data_file, model_file
 
 
 def build_parameters(model="GP"):
-    """Build the controller parameter dictionary for the selected model."""
+    """Build the controller parameter dictionary for the selected model.
+
+    Args:
+        model: Strategy name consumed by ``MPC``. Supported values are
+            ``"NNARX"``, ``"GP"``, and ``"BNNExp"``.
+
+    Returns:
+        A dictionary containing controller dimensions, timing and operating
+        limits, tuning values, model metadata, and the loaded electricity-price
+        and heat-load arrays. The configured sample time ``Ts`` is 300 seconds,
+        and the prediction horizon ``N`` is 12 steps.
+    """
     
     return {
         "Nb":               3,          # control updates using the block size Nb
@@ -55,7 +64,7 @@ def build_parameters(model="GP"):
         "Model":            model,
         "T_C0":             4,
         "n_slack":          1,
-        "nnarx_mat": os.path.join("NNmodels", "net_1020.mat"),
+        "nnarx_mat": model_file("net_1020.mat"),
         "c_el": np.genfromtxt(
             data_file("20250501_20250501_MGP_PrezziZonali_Nord.csv"),
             delimiter=";",

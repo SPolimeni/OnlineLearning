@@ -14,15 +14,27 @@ from class_MPC import MPC
 from utils.DataManagement import SaveAggregatedData
 from utils.DERTF_StatesDefinition import main_status_readings
 from utils.OPCUA.DERTF_SetPointsWriter import OPCUA_SetPoint
+from project_paths import fmu_file, LOGS_DIR
 
 if platform.system() == "Windows":
     from pyfmi import load_fmu
 
 
 class ControllerRunner:
-    """Own controller state and coordinate debug or live execution."""
+    """Own controller state and coordinate debug or live execution.
+
+    The runner stores time-indexed plant measurements, predictions, controls,
+    solver status, and costs, then dispatches each control step to ``MPC``.
+    Debug mode uses the FMU path; live mode uses the plant status reader and
+    OPC UA setpoint writer.
+    """
 
     def __init__(self, params, debug=False):
+        if not debug:
+            raise RuntimeError(
+                "Live mode is retained only to show the implementation boundary "
+                "and is not enabled for public operation."
+            )
         self.params = params
         self.opts = {"Debug": debug}
         self.controller = MPC(params)
@@ -37,9 +49,8 @@ class ControllerRunner:
         self.controller.InitialDate = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     def log_exception(self, message):
-        logs_folder = os.path.join(os.getcwd(), "LogsFolder")
-        os.makedirs(logs_folder, exist_ok=True)
-        log_file = os.path.join(logs_folder, "Exceptions.log")
+        os.makedirs(LOGS_DIR, exist_ok=True)
+        log_file = os.path.join(LOGS_DIR, "Exceptions.log")
         with open(log_file, "a") as log:
             log.write(f"{datetime.now()}: {message}\n")
 
@@ -268,17 +279,17 @@ class ControllerRunner:
     def _configure_live_plant(self):
         self.controller.SetPointsWriter = OPCUA_SetPoint()
         self.controller.SetPointsWriter.DataMap = {
-            "Power_HL1": {"NodeID": "ns=4;s=CO.FC_HL1_FT701L.r_PotenzaDesiderata", "Value": None},
-            "Power_HL2": {"NodeID": "ns=4;s=CO.FC_HL2_FT711L.r_PotenzaDesiderata", "Value": None},
-            "Power_HL3": {"NodeID": "ns=4;s=CO.FC_HL3_FT721L.r_PotenzaDesiderata", "Value": None},
-            "Power_HL4": {"NodeID": "ns=4;s=CO.FC_HL4_FT731L.r_PotenzaDesiderata", "Value": None},
-            "T_out_GB": {"NodeID": "ns=4;s=CO.GB.r_Ctrl_setpointGB", "Value": None},
-            "T_out_EB": {"NodeID": "ns=4;s=CO.EB.r_TemperOutput", "Value": None},
+            "Power_HL1": {"NodeID": "ns=0;s=PUBLIC.SYNTHETIC.CONTROL_001", "Value": None},
+            "Power_HL2": {"NodeID": "ns=0;s=PUBLIC.SYNTHETIC.CONTROL_002", "Value": None},
+            "Power_HL3": {"NodeID": "ns=0;s=PUBLIC.SYNTHETIC.CONTROL_003", "Value": None},
+            "Power_HL4": {"NodeID": "ns=0;s=PUBLIC.SYNTHETIC.CONTROL_004", "Value": None},
+            "T_out_GB": {"NodeID": "ns=0;s=PUBLIC.SYNTHETIC.CONTROL_005", "Value": None},
+            "T_out_EB": {"NodeID": "ns=0;s=PUBLIC.SYNTHETIC.CONTROL_006", "Value": None},
         }
 
     def _configure_fmu(self):
         controller = self.controller
-        controller.fmu = load_fmu("FMUs/DHN_MC_V3_FMU_EB_60.fmu")
+        controller.fmu = load_fmu(fmu_file("DHN_MC_V3_FMU_EB_60.fmu"))
         fmu_options = controller.fmu.simulate_options()
         fmu_options["CVode_options"]["rtol"] = 1e-4
         fmu_options["CVode_options"]["atol"] = 1e-4
@@ -302,7 +313,15 @@ class ControllerRunner:
 
 
 def initialize_buffers(controller, params):
-    """Allocate arrays used to store predictions, states, and costs."""
+    """Allocate time-indexed arrays used to store the control-loop results.
+
+    The main state and control histories have shapes
+    ``(n_out, num_steps)`` and ``(n_inp, num_steps)`` respectively. Prediction
+    histories use the same output ordering as the controller, while
+    ``theta_history`` has shape ``(num_steps, n_x, n_out)``. BNNExp stores its
+    output-sized slack history; the other strategies store ``n_slack`` slack
+    values per step.
+    """
     controller.theta_history = np.zeros([controller.num_steps, params["n_x"], params["n_out"]])
     controller.sigma = np.zeros([params["n_out"], controller.num_steps])
     controller.exploration = np.zeros((1, controller.num_steps))

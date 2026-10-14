@@ -21,6 +21,14 @@ from influxdb_client.client.write_api import SYNCHRONOUS
 
 import concurrent.futures
 
+from deployment_config import (
+   OPCUA_SERVER_URL,
+   INFLUXDB_BUCKET,
+   INFLUXDB_ORG,
+   INFLUXDB_TOKEN,
+   INFLUXDB_URL,
+)
+
 
 # ConfigData and Logs ship with this package, so they are resolved relative to
 # this file instead of the current working directory.
@@ -35,10 +43,10 @@ LOG_DATA_DIR    = os.path.join(_MODULE_DIR, 'Logs')
 
 class InfluxDB_connect:
    def __init__(self,**kwargs):
-      self.token  = "token" 
-      self.org    = "RSE"
-      self.url    = "http://xxx.xxx.xxx.xxxx:8086"
-      self.Bucket = "raw_data"
+      self.token  = kwargs.get("token", INFLUXDB_TOKEN)
+      self.org    = kwargs.get("org", INFLUXDB_ORG)
+      self.url    = kwargs.get("url", INFLUXDB_URL)
+      self.Bucket = kwargs.get("bucket", INFLUXDB_BUCKET)
 
       self.InfluxDBclient  = InfluxDBClient(url=self.url, token=self.token, org=self.org)
       self.WriteAPI        = self.InfluxDBclient.write_api(write_options=SYNCHRONOUS)
@@ -114,8 +122,7 @@ class InfluxDB_connect:
 
 class OPCUA_connect:
    def __init__(self,**kwargs):
-
-      self.server_url = "opc.tcp://xxx.xxx.xxx.xxx:4840/freeopcua/server/" 
+      self.server_url = kwargs.get("server_url", OPCUA_SERVER_URL)
       self.connected  = False
 
       # OPC UA Client reconnection parameters

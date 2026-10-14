@@ -4,12 +4,14 @@ import pickle
 import numpy as np
 from datetime import datetime
 
+from project_paths import solutions_dir
+
 
 def SaveAggregatedData(controller, t_step):
     Model       = controller.Param["Model"]
     InitialDate = controller.InitialDate
 
-    folder_name = f"Solutions/{Model}/{datetime.now().strftime('%d%m')}"
+    folder_name = solutions_dir(Model, datetime.now().strftime('%d%m'))
     os.makedirs(folder_name, exist_ok=True)
 
     timestamp = datetime.now().strftime('%H:%M')
@@ -20,15 +22,15 @@ def SaveAggregatedData(controller, t_step):
             csv.writer(f).writerow([timestamp, t_step] + values)
 
     def save_col(data, filename):
-        """data shape: [n_var, num_steps] — prende la colonna t_step"""
+        """Data shape: [n_var, num_steps] - select column t_step."""
         _append_row(filename, list(data[:, t_step].astype(np.float32)))
 
     def save_row(data, filename):
-        """data shape: [num_steps, n_var] — prende la riga t_step (es. y_rnn_out)"""
+        """Data shape: [num_steps, n_var] - select row t_step (for example, y_rnn_out)."""
         _append_row(filename, list(data[t_step, :].astype(np.float32)))
 
     def save_scalar(data, filename):
-        """data shape: [num_steps] — prende il valore scalare a t_step"""
+        """Data shape: [num_steps] - select the scalar value at t_step."""
         _append_row(filename, [float(data[t_step])])
 
     # CSV: timeseries (incremental append, robust to interruptions)
@@ -41,7 +43,7 @@ def SaveAggregatedData(controller, t_step):
     save_col(controller.exploration,    f'exploration_{InitialDate}.csv')
     save_scalar(controller.final_cost,         f'final_cost_{InitialDate}.csv')
     save_scalar(controller.computation_time,   f'computational_time_{InitialDate}.csv')
-    save_scalar(controller.sol_feas,   f'sol_feas{InitialDate}.csv') #MOD_new1 aggiunta questa riga per salvare sol_feas 
+    save_scalar(controller.sol_feas,   f'sol_feas{InitialDate}.csv') # MOD_new1: save sol_feas.
 
     # CSV: configurations' parameters (only on first timestep)
     params_csv_path = os.path.join(folder_name, f'config_{InitialDate}.csv')
@@ -62,7 +64,7 @@ def SaveAggregatedData(controller, t_step):
 
 def SaveData(y, u, s, Pb_pred, final_cost, computational_time, t_step, Model, InitialDate, exploration=None):
     # Create folder name with current date
-    folder_name = f"Solutions/{Model}/{datetime.now().strftime('%d%m')}"
+    folder_name = solutions_dir(Model, datetime.now().strftime('%d%m'))
     
     # Create folder if it doesn't exist
     if not os.path.exists(folder_name):

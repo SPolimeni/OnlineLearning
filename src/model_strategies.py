@@ -17,7 +17,13 @@ import numpy as np
 
 
 class ModelStrategy:
-    """Default hooks = NNARX behavior, the common baseline shared by all models."""
+    """Default hooks implementing the common NNARX strategy contract.
+
+    Hooks receive the owning ``MPC`` instance and add constraints, variables,
+    initial values, or solution extraction for one model variant. Prediction
+    arrays use output-major ordering ``(n_out, N)`` unless a method documents
+    the horizon-major form explicitly.
+    """
 
     def on_init(self, mpc):
         """Initialize any strategy-owned state once the MPC instance is built."""
@@ -78,12 +84,16 @@ class ModelStrategy:
 
 
 class NNARXStrategy(ModelStrategy):
-    """NNARX is the baseline itself: no overrides needed."""
+    """Baseline NNARX behavior with no model-specific overrides."""
     pass
 
 
 class GPStrategy(ModelStrategy):
-    """Gaussian-process residual correction layered on top of the NNARX prediction."""
+    """Gaussian-process residual correction layered on NNARX prediction.
+
+    The strategy owns mutable residual buffers and applies the GP correction
+    during horizon prediction; those buffers persist across control steps.
+    """
 
     class GPRegressionModel(gpytorch.models.ExactGP):
         """Small GP helper used for the model-error correction pattern."""
@@ -319,7 +329,7 @@ class GPStrategy(ModelStrategy):
 
 
 
-        ###### TEST per k+1 e fino a k+N in simulazione ####
+        ###### TEST for k+1 through k+N in simulation ####
         t=k
         r=-1
         for k in range(t,t+N):
@@ -411,7 +421,7 @@ class GPStrategy(ModelStrategy):
             x_tilde_3.extend(x_k_3)
             x_tilde_3.extend(u_3)
 
-            #vettori test
+            # test vectors
             x_k_1.pop()
             x_k_2.pop()
             x_k_3.pop()
@@ -573,7 +583,11 @@ class GPStrategy(ModelStrategy):
 
 
 class BNNExpStrategy(ModelStrategy):
-    """Bayesian last-layer model with uncertainty-aware exploration constraints."""
+    """Bayesian last-layer model with uncertainty-aware exploration constraints.
+
+    The strategy adds horizon-sized exploration slack and uncertainty variables,
+    and updates the last-layer parameters from the measured trajectory.
+    """
 
     def on_init(self, mpc):
         mpc.beta = np.array([

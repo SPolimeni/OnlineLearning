@@ -77,7 +77,7 @@ class MPC:
         if self.Model not in _STRATEGY_FACTORY:
             raise ValueError(f"Unsupported Model '{self.Model}'. Supported models: {sorted(_STRATEGY_FACTORY)}")
         
-        ### Initial value MPC
+        ### Initial MPC values
         # These values are the warm-start trajectory used at startup before the first
         # optimization solve. They avoid a full cold start and provide a stable initial
         # guess for the solver in the first receding-horizon iteration.
@@ -118,9 +118,9 @@ class MPC:
         self.out_scale=output_scaler['scale'][0]
 
         self.theta=np.vstack([U0,b0])
-        self.L_prev=self.L_prev0*np.eye(10) #TUNING
-        self.Q_prev=np.linalg.inv(self.L_prev)@self.theta #MODIFIED
-        self.sigma_epsilon2 = self.sigma_epsilon0_2 #MODIFIED - TUNING
+        self.L_prev=self.L_prev0*np.eye(10) # tuning parameter
+        self.Q_prev=np.linalg.inv(self.L_prev)@self.theta # modified initialization
+        self.sigma_epsilon2 = self.sigma_epsilon0_2 # modified tuning parameter
 
         self.strategy = _STRATEGY_FACTORY[self.Model]()
         self.strategy.on_init(self)
@@ -256,19 +256,19 @@ class MPC:
         r=int(np.floor(self.t/3)) 
         #gamma_pred_el =self.c_el[r,0]/1000*casadi.DM.ones(1,self.N) #$/KWh
 
-        gamma_pred_el = np.zeros((self.N,1))    #MODIFIED
+        gamma_pred_el = np.zeros((self.N,1))    # modified initialization
         for i in range(self.N):
             idx = int(np.floor((self.t+i) * len(self.c_el) / self.num_steps))
             idx = min(idx, len(self.c_el)-1)
-            gamma_pred_el[i] = self.c_el[idx]/1000 #c_el[idx] ALB come si vede dai file plot e dai codici test, i prezzi devono essere /1000, così ottimizzazione sembra più sensata
+            gamma_pred_el[i] = self.c_el[idx]/1000 # prices are scaled by 1000 for the optimization
         gamma_pred_el = gamma_pred_el.T
 
-        alpha_slack = alpha_slack0*casadi.MX.ones((1, self.n_slack))  #TUNING PARAMETER
+        alpha_slack = alpha_slack0*casadi.MX.ones((1, self.n_slack))  # tuning parameter
         
-        gamma_exp=gamma_exp0*np.ones((1, self.n_out)) #TUNING PARAMETER
+        gamma_exp=gamma_exp0*np.ones((1, self.n_out)) # tuning parameter
         
-        #gamma_slack=1000 #TUNING PARAMETER
-        gamma_slack = gamma_slack0*np.array([self.out_scale[0], self.out_scale[1], self.out_scale[2]]) #MODIFIED
+        #gamma_slack=1000 # tuning parameter
+        gamma_slack = gamma_slack0*np.array([self.out_scale[0], self.out_scale[1], self.out_scale[2]]) # modified scaling
 
         self.strategy.cost_expression(self, gamma_pred_gas, gamma_pred_el, alpha_slack, gamma_exp, gamma_slack)
 
@@ -284,7 +284,16 @@ class MPC:
             flag: exploration flag used by the controller.
 
         Returns:
-            u_opt, slack, y_nnarx, computation_time, sigma_pred, slack_explo, sol_feas
+            A tuple ``(u_opt, slack, y_nnarx, computation_time, sigma_pred,
+            slack_explo, sol_feas)``. ``u_opt`` is the first control move;
+            prediction and uncertainty arrays cover the configured horizon.
+            ``sol_feas`` is 0 during startup, 1 after the first solver attempt,
+            2 after the relaxed retry, and 3 when the fallback path is used.
+
+        Notes:
+            After a successful solve or fallback, the accepted trajectories are
+            stored as the warm start for the next call. No optimization is
+            performed for steps before ``T_C0``.
         """
         # This is the core of the control loop. At each time step it:
         # 1) collects the current plant state and past inputs,
@@ -300,7 +309,7 @@ class MPC:
         c_el = self.c_el
         # This flag records whether the optimizer solved the problem directly,
         # needed a relaxed retry, or had to fall back to the last feasible trajectory.
-        sol_feas = 0  #MOD_new1 aggiungo questa variabile per salvare stato feasibility
+        sol_feas = 0  # MOD_new1: initialize this variable to store feasibility status
 
         # The controller solves a prediction problem over N steps and reduces the
         # sequence to a smaller number of control updates using the block size Nb.
@@ -384,7 +393,7 @@ class MPC:
             try:
                 sol = self.opti.solve()
                 print('*** Problem solved ***')
-                sol_feas = 1 #MOD_new1 aggiunto per salvare stato feasibility
+                sol_feas = 1  # MOD_new1: store feasibility status
                 u_opt = sol.value(self.u[:, 0])
                 u_pred = sol.value(self.u)
 
@@ -418,7 +427,7 @@ class MPC:
                     }
                     self.opti.solver('ipopt', prob_opts, ip_opts)
                     sol = self.opti.solve()
-                    sol_feas = 2  #MOD_new1 aggiunto per salvare stato feasibility
+                    sol_feas = 2  # MOD_new1: store feasibility status
                     print('*** Problem solved on second attempt ***')
                     u_opt = sol.value(self.u[:, 0])
                     u_pred = sol.value(self.u)
@@ -433,7 +442,7 @@ class MPC:
                     # This fallback keeps the system running even when the optimizer fails.
                     # It reuses the last stable plan instead of producing a broken or
                     # inconsistent control command.
-                    sol_feas = 3  #MOD_new1 aggiunto per salvare stato feasibility
+                    sol_feas = 3  # MOD_new1: store feasibility status
                     fallback_u_pred = self.u_prec.copy()
                     fallback_u_pred[0:4, 0] = self.Potenze[:, self.t] + self.P_Shift_mpc1
                     u_opt = fallback_u_pred[:,0]
@@ -459,10 +468,15 @@ class MPC:
         end_time=time.time()
         computation_time=end_time-start_time
 
-        return  u_opt,slack,y_nnarx,computation_time,sigma_pred, slack_explo, sol_feas  #MOD_new1 aggiunto sol_feas agli output
+        return  u_opt,slack,y_nnarx,computation_time,sigma_pred, slack_explo, sol_feas  # MOD_new1: include sol_feas in the outputs
 
     def simulate_dynamics(self, k, initial_state, input_vector, A, Bu, Bx, C, steps, weights, n_states, ground_truth, theta):
-        """Advance the internal state-space representation over the prediction horizon."""
+        """Advance the normalized recurrent state over the prediction horizon.
+
+        Returns:
+            The final latent state, predicted outputs with shape ``(n_out, N)``,
+            and uncertainty values with shape ``(N, n_out)``.
+        """
         n_out = self.n_out
         states = casadi.MX.zeros(n_states)
         outputs = casadi.MX.zeros((n_out, self.N))
@@ -609,7 +623,12 @@ class MPC:
         return Y_pred,Y_RNN, Sigma
 
     def activation_fun(self, input_vector, weights, state_vector, theta):
-        """Evaluate the neural activation used inside the model-based dynamics simulation."""
+        """Evaluate one recurrent neural activation in normalized coordinates.
+
+        Returns:
+            The output vector for the current step and its scalar uncertainty
+            expression used by the active strategy.
+        """
         # The prediction model is built as a structured recurrent network: the hidden
         # state is updated from the current state and inputs, then a nonlinear activation
         # produces the output estimate. This is the core computational block used in the
@@ -667,7 +686,9 @@ class MPC:
 
         This is the mechanism that adapts the model when the controller is operating
         with uncertainty-aware corrections. Delegated to the active model strategy;
-        only BNNExp implements it.
+        only BNNExp implements it. The update uses the measured output history and
+        preceding control history, then returns the current last-layer parameter
+        matrix for storage by the runtime.
         """
         return self.strategy.bayesian_correction(self, s, y_star, u)
 
