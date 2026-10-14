@@ -31,11 +31,10 @@ import time
 from model_strategies import NNARXStrategy, GPStrategy, BNNExpStrategy
 
 _STRATEGY_FACTORY = {
-    "NNARX": NNARXStrategy,
-    "GP": GPStrategy,
-    "BNNExp": BNNExpStrategy,
+    "NNARX":    NNARXStrategy,  
+    "GP":       GPStrategy,
+    "BNNExp":   BNNExpStrategy,
 }
-
 
 class MPC:
     """Model-predictive controller for the thermal energy system.
@@ -56,101 +55,50 @@ class MPC:
         The constructor loads model metadata and initializes the prior predictions,
         costs, and control buffers used in the receding-horizon loop.
         """
-        ### from param takes the default parameters
-        # Blocking strategy: parameters are kept in a single dictionary and attached
-        # to the controller instance to preserve the current runtime contract.
-        # This keeps the code compatible with the current orchestration style without
-        # introducing a new configuration object or a wider validation layer.
-        print("IN!!!!")
-        self.Nb = Param["Nb"]
-    
-        # The controller operates on a receding-horizon strategy: it solves a finite
-        # optimization problem over N steps, then applies only the first control action
-        # before repeating the cycle at the next time step.
-        self.ore_tot = Param["tot_hours"]
-        self.total_time = self.ore_tot * 3600
-        self.time_step = 300
-        self.num_steps = self.total_time // self.time_step + 1
-        self.N=Param["N"]
-        self.n_out=Param["n_out"]
-        self.n_inp=Param["n_inp"]
-        self.n_uopt=int(self.N/self.Nb)
-        self.n_slack=1
-        
-        ### import from Param
-        # These parameters define the thermal comfort/energy trade-off for the three
-        # controlled outputs: delivery temperature, return temperature, and mass flow.
-        self.beta0_1 = Param["beta0_1"] # MODIFIED
-        self.beta0_2 = Param["beta0_2"] # MODIFIED
-        self.beta0_3 = Param["beta0_3"] # MODIFIED
+        print("MPC class initialization")
+        self._assign_parameters(Param)
 
-        self.epsilon0 = Param["epsilon0"] # MODIFIED
-        self.L_prev0  = Param["L_prev0"] # MODIFIED
-        self.sigma_epsilon0_2 = Param["sigma_epsilon0_2"] # MODIFIED
+    def _assign_parameters(self, params: dict):
+        """Copy configuration values and initialize the derived controller state."""
+        for name, value in params.items():
+            if name == "c_el":
+                value = self.ensure2D(value)
+            setattr(self, name, value)
 
-        self.gamma=Param["gamma"] #MODIFIED
-        self.T_ref=Param["T_ref"]  #MODIFIED
-        self.c_gas=Param["c_gas"]  #MODIFIED
-        self.COP=Param["COP"]  #MODIFIED
-        self.eff_EB=Param["eff_EB"]  #MODIFIED
-        self.gamma_exp0=Param["gamma_exp0"]  #MODIFIED
-        self.gamma_slack0=Param["gamma_slack0"]  #MODIFIED
-        self.alpha_slack0=Param["alpha_slack0"]  #MODIFIED
+        self.total_time = self.tot_hours * 3600
+        self.time_step  = 300
+        self.num_steps  = self.total_time // self.time_step + 1
+        self.n_uopt     = int(self.N / self.Nb)
 
-        self.P_Shift_mpc1=Param["P_Shift_mpc1"]  #MODIFIED
-        self.P_Shift_mpc2=Param["P_Shift_mpc2"]  #MODIFIED
-        self.P_Shift_mpc3=Param["P_Shift_mpc3"]  #MODIFIED
-        self.P_Shift_mpc4=Param["P_Shift_mpc4"]  #MODIFIED
+        # ``data`` is derived from the model path; it is not a configuration key.
+        self.data       = loadmat(self.nnarx_mat)
+        self.Potenze    = self.Potenza.T + self.P_Shift
 
-        self.Ts=Param["Ts"]
-        self.q_eb=Param["q_eb"]
-        self.Tr_max=Param["Tr_max"]
-        self.Tr_min=Param["Tr_min"]
-        self.Ts_max=Param["Ts_max"]
-        self.Ts_max_eb=Param["Ts_max_eb"]
-        self.Ts_min_supply=Param["Ts_min_supply"]
-        self.Ts_max_gb=Param["Ts_max_gb"]
-        self.Ts_min_gb=Param["Ts_min_gb"]
-        self.Ts_max_eb=Param["Ts_max_eb"]
-        self.Ts_min_eb=Param["Ts_min_eb"]
-        self.m_max=Param["m_max"]
-        self.m_min=Param["m_min"]
-        self.Pb_max=Param["Pb_max"]
-        self.Pb_min=Param["Pb_min"]
-        self.Pb_max_eb=Param["Pb_max_eb"]
-        self.Pb_min_eb=Param["Pb_min_eb"]
-        self.data=loadmat(Param["nnarx_mat"])
-        self.c_el=self.ensure2D(Param["c_el"])
-
-        # Load the district-heating demand profile and add the current shift offset.
-        # The profile is stored as a time series and used as the known load input over
-        # the horizon; this is part of the prediction model, not a hard-coded plant signal.
-        self.Potenze=Param["Potenza"].T+Param['P_Shift'] #potenza all'istante k
-        self.Model=Param["Model"]
         if self.Model not in _STRATEGY_FACTORY:
             raise ValueError(f"Unsupported Model '{self.Model}'. Supported models: {sorted(_STRATEGY_FACTORY)}")
-        self.T_C0=Param["T_C0"] #istante in cui inizio ad applicare la legge di controllo
         
-        ### initial value MPC
+        ### Initial value MPC
         # These values are the warm-start trajectory used at startup before the first
         # optimization solve. They avoid a full cold start and provide a stable initial
         # guess for the solver in the first receding-horizon iteration.
         self.J_prec=0
-        y_pred=np.zeros([self.n_out,self.N])
-        y_pred[0,:]=70.2690912858482
-        y_pred[1,:]=60.786245068179
-        y_pred[2,:]=2.5
-        self.y_prec=y_pred
-        u_pred=np.zeros([self.n_inp,self.N])
-        u_pred[0:4,:]=-32000
-        u_pred[4,:]=70.5
-        u_pred[5,:]=70.0
-        self.u_prec=u_pred
+        y_pred          = np.zeros([self.n_out,self.N])
+        y_pred[0,:]     = 70.2690912858482
+        y_pred[1,:]     = 60.786245068179
+        y_pred[2,:]     = 2.5
+
+        self.y_prec     = y_pred
+        u_pred          = np.zeros([self.n_inp,self.N])
+        u_pred[0:4,:]   = -32000
+        u_pred[4,:]     = 70.5
+        u_pred[5,:]     = 70.0
+        self.u_prec     = u_pred
+
         cp = 4186
-        Pb_pred = np.zeros([2, self.N])
-        Pb_pred[0,:] = cp * (self.y_prec[2,:] - self.q_eb) * (self.u_prec[4,:] - self.y_prec[1,:])
-        Pb_pred[1,:] = cp * self.q_eb * (self.u_prec[5,:] - self.y_prec[1,:])
-        self.Pb_prec = Pb_pred
+        Pb_pred         = np.zeros([2, self.N])
+        Pb_pred[0,:]    = cp * (self.y_prec[2,:] - self.q_eb) * (self.u_prec[4,:] - self.y_prec[1,:])
+        Pb_pred[1,:]    = cp * self.q_eb * (self.u_prec[5,:] - self.y_prec[1,:])
+        self.Pb_prec    = Pb_pred
         self.sigma_prec = 0.05 * np.ones((self.N, self.n_out))
 
         ### bayesian last layer ###

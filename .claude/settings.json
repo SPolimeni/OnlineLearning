@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python smoke_test.py)",
+      "Bash(./env/Scripts/python.exe smoke_test.py)",
+      "Bash(./env/python.exe smoke_test.py)",
+      "Bash(./env/python.exe \"C:\\\\Users\\\\Polimeni\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Polimeni-00-GitRepos-OnlineLearning\\\\892a12f3-6b75-4437-81ad-2cdfe5e774d7\\\\scratchpad\\\\verify_strategy_refactor.py\")",
+      "Bash(git checkout *)"
+    ]
+  }
+}

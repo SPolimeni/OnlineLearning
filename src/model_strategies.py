@@ -76,10 +76,6 @@ class ModelStrategy:
                 Y_RNN[i, j] = out_scale[i] * outputs[i, j] + out_bias[i] * np.ones([1, 1])
         return Y_pred, Y_RNN
 
-    def bayesian_correction(self, mpc, s, y_star, u):
-        """Update the Bayesian last layer; only supported by BNNExp."""
-        raise NotImplementedError(f"bayesian_correction is not supported for model '{mpc.Model}'")
-
 
 class NNARXStrategy(ModelStrategy):
     """NNARX is the baseline itself: no overrides needed."""
@@ -94,8 +90,8 @@ class GPStrategy(ModelStrategy):
 
         def __init__(self, train_x, train_y, likelihood):
             super().__init__(train_x, train_y, likelihood)
-            self.mean_module = gpytorch.means.ConstantMean()
-            self.covar_module = gpytorch.kernels.ScaleKernel(
+            self.mean_module    = gpytorch.means.ConstantMean()
+            self.covar_module   = gpytorch.kernels.ScaleKernel(
                 gpytorch.kernels.RBFKernel(
                     lengthscale=1.0,
                     length_scale_bounds=(1e-3, 1e3),
@@ -104,7 +100,7 @@ class GPStrategy(ModelStrategy):
             )
 
         def forward(self, x):
-            mean_x = self.mean_module(x)
+            mean_x  = self.mean_module(x)
             covar_x = self.covar_module(x)
             return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
 
