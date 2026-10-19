@@ -16,11 +16,11 @@ At each control step, the runtime reads the current state, optionally updates th
 
 - [Main_OnlineLearningMPC.py](Main_OnlineLearningMPC.py) is the command-line entry point.
 - [src/config/parameters.py](src/config/parameters.py) builds the parameter dictionary and loads bundled CSV inputs.
-- [src/runtime/controller_runner.py](src/runtime/controller_runner.py) owns the control loop, debug/live selection, I/O, persistence, and exception logging.
+- [src/runtime/controller_runner.py](src/runtime/controller_runner.py) owns the control loop, debug/live boundary, I/O, persistence, and exception logging.
 - [src/class_MPC.py](src/class_MPC.py) builds and solves the optimization problem.
 - [src/model_strategies.py](src/model_strategies.py) implements model-specific behavior.
 - [NNmodels](NNmodels) contains MAT model files; [FMUs](FMUs) contains debug FMUs.
-- [Solutions](Solutions) receives run outputs. `LogsFolder/` is created for exception logs.
+- `Solutions/` and `LogsFolder/` are local-only output locations and are excluded from the public repository.
 
 For the detailed data and control flow, see the [public architecture documentation](docs/public/architecture.md).
 
@@ -61,27 +61,27 @@ From the repository root, run the import smoke test:
 python smoke_test.py
 ```
 
-To select a strategy, pass `--Model NNARX`, `--Model GP`, or `--Model BNNExp`. Use `--Debug` for the FMU route described below.
+To select a strategy, pass `--Model NNARX`, `--Model GP`, or `--Model BNNExp`. Debug mode is the default; `--Debug` may be supplied explicitly.
 
 ## Debug simulation
 
 The debug command is an FMU simulation and does not intentionally use the live InfluxDB or OPC UA path:
 
 ```powershell
-python Main_OnlineLearningMPC.py --Debug --Model GP
+python Main_OnlineLearningMPC.py --Model GP
 ```
 
 The runner loads `FMUs/DHN_MC_V3_FMU_EB_60.fmu`, seeds startup buffers, executes the controller loop, and feeds generated controls back to the FMU. pyFMI support is Windows-dependent in the current implementation. This command is a debug simulation, not proof of numerical reproduction of published results; no fixed trajectory baseline, FMU hash, or full provenance record is currently documented.
 
-## Live plant execution
+## Live integration boundary
 
-Without `--Debug`, the process enters the live runtime path and remains active until interrupted:
+The retained live integration can be inspected in the source, but public live execution is disabled. An explicit live request is rejected:
 
 ```powershell
-python Main_OnlineLearningMPC.py --Model GP
+python Main_OnlineLearningMPC.py --Live --Model GP
 ```
 
-The live path reads status through InfluxDB and writes control setpoints through OPC UA. It requires deployment-specific credentials, endpoints, node mappings, network access, and plant approval. Do not publish credentials, tokens, internal hostnames, certificates, node identifiers, or other infrastructure metadata. No public installation can be considered live-ready without an approved deployment configuration.
+The command raises an error stating that live integration is illustrative and read-only and is not enabled for public execution. The source retains the InfluxDB and OPC UA integration boundary to document the applied architecture, but it does not permit public connections or writes.
 
 ## Input data and trained models
 
@@ -89,7 +89,7 @@ The parameter builder loads bundled CSV files from `src/utils/data/`, including 
 
 ## Outputs and result files
 
-Runs append CSV and pickle files below `Solutions/<Model>/<ddmm>/`, including measured and predicted outputs, recurrent predictions, control actions, boiler predictions, slacks, exploration, cost, computation time, feasibility status, configuration, and Bayesian `theta`/`sigma` state. The run timestamp is included in filenames. Exceptions are appended to `LogsFolder/Exceptions.log`. These repository locations are resolved from the source tree; launch commands from the repository root are still recommended because the entry-point import path is configured there.
+Local runs append CSV and pickle files below `Solutions/<Model>/<ddmm>/`, including measured and predicted outputs, recurrent predictions, control actions, boiler predictions, slacks, exploration, cost, computation time, feasibility status, configuration, and Bayesian `theta`/`sigma` state. Exceptions are appended to `LogsFolder/Exceptions.log`. These generated locations are excluded from the public repository.
 
 ## Reproducing the published results
 

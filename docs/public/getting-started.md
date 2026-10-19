@@ -32,7 +32,8 @@ The entry point is [Main_OnlineLearningMPC.py](../../Main_OnlineLearningMPC.py).
 | Option | Values | Meaning |
 | --- | --- | --- |
 | `--Model` | `NNARX`, `GP`, `BNNExp` | Selects the model strategy; default: `GP`. |
-| `--Debug` | flag | Uses the FMU simulation path instead of live plant I/O. |
+| `--Debug` | flag | Explicitly selects the FMU simulation path; debug is already the default. |
+| `--Live` | flag | Rejected: live integration is illustrative/read-only and disabled for public execution. |
 
 The runtime parameter dictionary includes dimensions, timing, operating limits, the default MAT model path, and bundled electricity-price and heat-load arrays. These values are source configuration, not user-editable deployment settings exposed by a configuration file.
 
@@ -46,7 +47,7 @@ python smoke_test.py
 
 ## 4. Run a debug simulation
 
-Use the debug flag for local controller work:
+Debug mode is the safe default. The explicit form is:
 
 ```powershell
 python Main_OnlineLearningMPC.py --Debug --Model GP
@@ -54,19 +55,19 @@ python Main_OnlineLearningMPC.py --Debug --Model GP
 
 The runner loads `FMUs/DHN_MC_V3_FMU_EB_60.fmu`, initializes startup buffers, solves successive MPC steps, and sends generated controls back to the FMU. Use `NNARX` or `BNNExp` in place of `GP` to exercise the other strategy implementations. Debug execution is not a live-plant test and should not be described as exact article reproduction without a fixed baseline, asset hash, environment record, and owner-approved tolerances.
 
-## 5. Understand the live path
+## 5. Understand the live integration boundary
 
-Omitting `--Debug` selects live mode:
+The retained live boundary can be inspected but is disabled for public execution. An explicit request is rejected:
 
 ```powershell
-python Main_OnlineLearningMPC.py --Model GP
+python Main_OnlineLearningMPC.py --Live --Model GP
 ```
 
-The runtime schedules status reads through InfluxDB and writes setpoints through OPC UA. Live operation requires deployment-specific credentials, endpoints, node mappings, network access, and plant authorization. These values must remain private and must not be added to public documentation or source control. Do not run this command unless the deployment owner has supplied and approved the complete configuration.
+The command raises an error explaining that live integration is illustrative and read-only and is not enabled for public execution. InfluxDB and OPC UA modules remain in the source to document the real-plant application boundary, but public commands do not connect to them.
 
 ## 6. Locate inputs and outputs
 
-Bundled CSV inputs are loaded from `src/utils/data/`. The default neural model is `NNmodels/net_1020.mat`; FMU files are under `FMUs/`. During execution, `Solutions/<Model>/<ddmm>/` receives timestamped CSV files for measurements, predictions, controls, boiler predictions, slacks, exploration, costs, computation time, feasibility, and configuration, plus a `ThetaAndSigma` pickle. Runtime exceptions are appended to `LogsFolder/Exceptions.log`.
+Bundled CSV inputs are loaded from `src/utils/data/`. The default neural model is `NNmodels/net_1020.mat`; FMU files are under `FMUs/`. Local execution writes generated results under `Solutions/<Model>/<ddmm>/` and exceptions under `LogsFolder/`; these locations are excluded from the public repository.
 
 ## 7. Reproducibility levels
 

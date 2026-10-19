@@ -22,12 +22,12 @@ The most important files are:
 
 ## Execution Flow
 
-The execution flow begins in [Main_OnlineLearningMPC.py](../../Main_OnlineLearningMPC.py), which adds `src/` to the import path, parses `--Model {NNARX,GP,BNNExp}` (default `GP`) and `--Debug`, calls `build_parameters(model)`, creates a `ControllerRunner(parameters, debug=...)`, and calls `run()`.
+The execution flow begins in [Main_OnlineLearningMPC.py](../../Main_OnlineLearningMPC.py), which adds `src/` to the import path, parses `--Model {NNARX,GP,BNNExp}` (default `GP`) and the debug/live boundary, calls `build_parameters(model)`, creates a `ControllerRunner(parameters, debug=...)`, and calls `run()`. Debug is the default; an explicit `--Live` request is rejected before controller construction.
 
 `ControllerRunner.run()` selects one of two execution paths:
 
 - **debug mode** (`--Debug`): loads the FMU, seeds buffers with the warm-start trajectory, and calls `solve_step()` in a plain loop
-- **live mode**: configures the OPC UA setpoint writer and starts scheduled InfluxDB reads and MPC solves; the process runs until interrupted
+- **live integration boundary**: retained source modules show the OPC UA/InfluxDB application interface, but public live execution is rejected as illustrative/read-only
 
 Model, FMU, output, and log paths are resolved through [src/project_paths.py](../../src/project_paths.py) from the repository tree. The entry point is intended to be launched from the repository root because it adds the relative `src/` directory to the import path. CSV input data is also resolved through `project_paths.data_file`.
 
