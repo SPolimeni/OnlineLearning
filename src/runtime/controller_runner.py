@@ -20,6 +20,12 @@ if platform.system() == "Windows":
     from pyfmi import load_fmu
 
 
+PUBLIC_LIVE_DISABLED_MESSAGE = (
+    "Live integration is illustrative and read-only; "
+    "it is not enabled for public execution."
+)
+
+
 class ControllerRunner:
     """Own controller state and coordinate debug or live execution.
 
@@ -31,10 +37,7 @@ class ControllerRunner:
 
     def __init__(self, params, debug=False):
         if not debug:
-            raise RuntimeError(
-                "Live mode is retained only to show the implementation boundary "
-                "and is not enabled for public operation."
-            )
+            raise RuntimeError(PUBLIC_LIVE_DISABLED_MESSAGE)
         self.params = params
         self.opts = {"Debug": debug}
         self.controller = MPC(params)

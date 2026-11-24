@@ -21,13 +21,13 @@ class PublicSafetyTest(unittest.TestCase):
 
     def test_explicit_live_request_is_rejected_before_building_parameters(self):
         with patch.object(Main_OnlineLearningMPC, "build_parameters") as build_parameters:
-            with self.assertRaisesRegex(RuntimeError, "not enabled for public operation"):
+            with self.assertRaisesRegex(RuntimeError, "not enabled for public execution"):
                 Main_OnlineLearningMPC.main(["--Live"])
         build_parameters.assert_not_called()
 
     def test_runner_rejects_live_before_constructing_mpc(self):
         with patch("runtime.controller_runner.MPC") as mpc:
-            with self.assertRaisesRegex(RuntimeError, "not enabled for public operation"):
+            with self.assertRaisesRegex(RuntimeError, "not enabled for public execution"):
                 ControllerRunner({}, debug=False)
         mpc.assert_not_called()
 
@@ -39,9 +39,9 @@ class PublicSafetyTest(unittest.TestCase):
             for section in config.values():
                 for node_id, metadata in section.items():
                     self.assertTrue(node_id.startswith("ns=0;s=PUBLIC.SYNTHETIC."))
-                    self.assertTrue(metadata["Tag"].startswith("synthetic_tag_"))
-                    self.assertEqual(metadata["Zone"], "synthetic_zone")
-                    self.assertEqual(metadata["Measurement"], "synthetic_measurement")
+                    self.assertTrue(metadata["Tag"].startswith("SYNTHETIC_"))
+                    self.assertTrue(metadata["Zone"].startswith("PUBLIC_ZONE_"))
+                    self.assertEqual(metadata["Measurement"], "PUBLIC_SYNTHETIC")
 
 
 if __name__ == "__main__":

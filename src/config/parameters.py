@@ -19,6 +19,77 @@ def _require_file(path, description):
         )
 
 
+def load_electricity_prices(path):
+    """Load the semicolon-delimited electricity-price column."""
+    _require_file(path, "electricity-price data")
+    values = np.atleast_1d(
+        np.genfromtxt(path, delimiter=";", usecols=2, skip_header=1)
+    )
+    if values.size == 0 or not np.all(np.isfinite(values)):
+        raise ValueError(
+            f"Electricity-price data must contain finite numeric values: {path}"
+        )
+    return values
+
+
+def load_heat_loads(path):
+    """Load the four heat-load columns used by the controller."""
+    _require_file(path, "heat-load data")
+    values = np.genfromtxt(
+        path,
+        delimiter=",",
+        usecols=(3, 4, 5, 6),
+        skip_header=28,
+    )
+    values = np.asarray(values)
+    if values.ndim == 1:
+        values = values.reshape(1, -1)
+    if values.size == 0 or values.ndim != 2 or values.shape[1] != 4:
+        raise ValueError(
+            f"Heat-load data must contain four numeric columns: {path}"
+        )
+    if not np.all(np.isfinite(values)):
+        raise ValueError(f"Heat-load data contains non-finite values: {path}")
+    return values
+
+
+def validate_model_metadata(model_data, n_x, n_out):
+    """Validate the MAT fields and array shapes consumed by ``MPC``."""
+    missing = [key for key in ("layers", "output_scaler") if key not in model_data]
+    if missing:
+        raise ValueError(
+            "Loaded neural-network model is missing " + ", ".join(repr(key) for key in missing)
+        )
+
+    try:
+        weights = model_data["layers"][0, 0]["weights"][0, 0]
+        u0 = np.asarray(weights["U0"][0, 0])
+        b0 = np.asarray(weights["b0"][0, 0])
+        scaler = model_data["output_scaler"][0, 0]
+        bias = np.asarray(scaler["bias"][0])
+        scale = np.asarray(scaler["scale"][0])
+    except (IndexError, KeyError, TypeError, ValueError) as error:
+        raise ValueError(f"Loaded neural-network model metadata is invalid: {error}") from error
+
+    expected_shapes = (
+        ("U0", u0, (n_x - 1, n_out)),
+        ("b0", b0, (1, n_out)),
+        ("output bias", bias, (n_out,)),
+        ("output scale", scale, (n_out,)),
+    )
+    errors = [
+        f"{name} has shape {value.shape}; expected {expected_shape}"
+        for name, value, expected_shape in expected_shapes
+        if value.shape != expected_shape
+    ]
+    if not all(np.all(np.isfinite(value)) for _, value, _ in expected_shapes):
+        errors.append("model metadata contains non-finite values")
+    if scale.shape == (n_out,) and np.any(scale == 0):
+        errors.append("output scale contains zero values")
+    if errors:
+        raise ValueError("Loaded neural-network model metadata is invalid:\n- " + "\n- ".join(errors))
+
+
 def validate_parameter_guards(params):
     """Validate parameter bounds and the minimum problem/data dimensions."""
     errors = []
@@ -132,9 +203,10 @@ def validate_parameters(params):
         except (OSError, TypeError, ValueError) as error:
             errors.append(f"Neural-network model could not be loaded: {error}")
         else:
-            for key in ("layers", "output_scaler"):
-                if key not in model_data:
-                    errors.append(f"Loaded neural-network model is missing '{key}'")
+            try:
+                validate_model_metadata(model_data, params["n_x"], params["n_out"])
+            except ValueError as error:
+                errors.append(str(error))
 
     for module_name in ("casadi", "torch", "gpytorch", "pyfmi"):
         try:
@@ -260,16 +332,6 @@ def build_parameters(model="GP"):
         "bnn_slack_max": np.array([50, 50, 50]),
         "bnn_initial_slack_max": np.array([5, 1, 3]),
         "nnarx_mat": model_file("net_1020.mat"),
-        "c_el": np.genfromtxt(
-            price_data_path,
-            delimiter=";",
-            usecols=(2),
-            skip_header=2,
-        ),
-        "Potenza": np.genfromtxt(
-            load_data_path,
-            delimiter=",",
-            usecols=(3, 4, 5, 6),
-            skip_header=28,
-        ),
+        "c_el": load_electricity_prices(price_data_path),
+        "Potenza": load_heat_loads(load_data_path),
     }

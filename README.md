@@ -63,6 +63,10 @@ python smoke_test.py
 
 To select a strategy, pass `--Model NNARX`, `--Model GP`, or `--Model BLL`. Debug mode is the default; `--Debug` may be supplied explicitly.
 
+The terms **test**, **debug**, and **live** refer to distinct paths. See the
+[execution-mode reference](docs/public/execution-modes.md) for the authoritative
+commands, external-I/O boundaries, and validation claims for each case.
+
 ## Debug simulation
 
 The debug command is an FMU simulation and does not intentionally use the live InfluxDB or OPC UA path:
@@ -103,7 +107,32 @@ Live plant execution is not a reproducibility level. It requires private infrast
 
 ## Tests and validation
 
-The available `smoke_test.py` is an import check. The repository does not currently establish tests for optimization feasibility, first control moves, fallback status, strategy-specific behavior, Bayesian updates, exploration, or FMU trajectories. A publication release should add owner-approved fixtures, tolerances, environment records, asset hashes, and representative debug baselines before claiming article-level reproduction.
+Run the unit tests separately from the smoke test:
+
+```powershell
+python -m unittest discover -s tests -p "test_*.py"
+```
+
+The smoke test validates imports, the representative GP configuration, and the
+example FMU path; the unit tests cover the assertions currently encoded under
+`tests/`. Run compilation, smoke validation, and all unit tests with:
+
+```powershell
+python tests/validate_publication.py
+```
+
+Validate the separate reduced GP/FMU numerical baseline with:
+
+```powershell
+python tests/validate_fmu_baseline.py
+```
+
+The repository does not currently establish tests for complete optimization
+feasibility, successful first control moves across every strategy, Bayesian
+updates, exploration, or complete FMU trajectories.
+A publication release should add owner-approved fixtures, tolerances,
+environment records, asset hashes, and representative debug baselines before
+claiming article-level reproduction.
 
 ## Known limitations
 

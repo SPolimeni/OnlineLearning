@@ -9,7 +9,7 @@ import argparse
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
 
 from config.parameters import SUPPORTED_MODELS, build_parameters, validate_parameters
-from runtime.controller_runner import ControllerRunner
+from runtime.controller_runner import ControllerRunner, PUBLIC_LIVE_DISABLED_MESSAGE
 
 
 def parse_args(argv=None):
@@ -54,10 +54,7 @@ def main(argv=None):
     """
     args = parse_args(argv)
     if not args.Debug:
-        raise RuntimeError(
-            "Live integration is illustrative and read-only; it is not enabled "
-            "for public execution."
-        )
+        raise RuntimeError(PUBLIC_LIVE_DISABLED_MESSAGE)
     parameters = build_parameters(args.Model)
     validate_parameters(parameters)
     ControllerRunner(parameters, debug=args.Debug).run()

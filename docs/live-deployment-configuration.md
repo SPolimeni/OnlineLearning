@@ -4,6 +4,11 @@ Live mode is deployment-specific and is not exercised by the offline tests.
 The connectors read private settings from environment variables when they are
 constructed:
 
+The public entry point currently rejects `--Live` before constructing those
+connectors. Supplying the variables below does not enable live execution. See
+[public/execution-modes.md](public/execution-modes.md) for the authoritative
+mode definitions and safety boundary.
+
 | Setting | Environment variable |
 | --- | --- |
 | OPC UA server URL | `ONLINELEARNING_OPCUA_SERVER_URL` |

@@ -37,3 +37,17 @@ conda run --prefix .\env python <command>
 `openpyxl` is intentionally optional and is not part of the core environment; it is used only by the private Excel metadata conversion utility.
 
 This record verifies environment setup and imports only. It does not validate FMU trajectories, numerical article reproduction, or live plant integrations.
+
+## Validation update: 2026-11-24
+
+The publication validation was rerun in the repository-local environment:
+
+- `python tests/validate_publication.py`: passed Python compilation, the extended
+  smoke test, and all 14 unit tests.
+- `python tests/validate_fmu_baseline.py`: passed the versioned asset hashes and the
+  reduced GP baseline for solver status, first optimized control, one controlled
+  FMU interval, and cost.
+
+The FMU baseline is an implementation-level regression only. It does not
+validate a complete trajectory, other model strategies, exact article results,
+or a live plant integration.

@@ -16,6 +16,8 @@ conda activate .\env
 Keep this Conda environment active for every import, smoke-test, and controller command. In particular, the FMU path requires the Windows-native pyFMI and Assimulo libraries supplied by this environment. An equivalent non-interactive form is `conda run --prefix .\env python <command>`.
 
 The verified local workflow and results are recorded in [environment-verification.md](environment-verification.md). The distinction between source/import reproducibility, implementation-level debug simulation, and exact article-result reproduction is recorded in [reproducibility-matrix.md](reproducibility-matrix.md).
+The authoritative distinction between test, debug, and live execution is
+defined in [execution-modes.md](execution-modes.md).
 
 Update an existing environment with:
 
@@ -49,7 +51,24 @@ This is an import and wiring check. It does not start the controller, load the F
 python smoke_test.py
 ```
 
-## 4. Run a debug simulation
+## 4. Run the unit tests
+
+The unit-test suite is separate from both the smoke test and debug simulation:
+
+```powershell
+python -m unittest discover -s tests -p "test_*.py"
+```
+
+These tests validate only the assertions currently encoded under `tests/`.
+They do not execute the FMU controller trajectory or contact live services.
+
+Run compilation, the extended smoke test, and all unit tests with one command:
+
+```powershell
+python tests/validate_publication.py
+```
+
+## 5. Run a debug simulation
 
 Debug mode is the safe default. The explicit form is:
 
@@ -59,7 +78,17 @@ python Main_OnlineLearningMPC.py --Debug --Model GP
 
 The runner loads `FMUs/DHN_MC_V3_FMU_EB_60.fmu`, initializes startup buffers, solves successive MPC steps, and sends generated controls back to the FMU. Use `NNARX` or `BLL` in place of `GP` to exercise the other strategy implementations. Debug execution is not a live-plant test and should not be described as exact article reproduction without a fixed baseline, asset hash, environment record, and owner-approved tolerances.
 
-## 5. Understand the live integration boundary
+Validate the reduced GP debug baseline separately:
+
+```powershell
+python tests/validate_fmu_baseline.py
+```
+
+This command checks asset hashes and one controlled FMU interval against
+[fmu-baseline.json](fmu-baseline.json). It is an implementation-level
+regression, not an article-result baseline.
+
+## 6. Understand the live integration boundary
 
 The retained live boundary can be inspected but is disabled for public execution. An explicit request is rejected:
 
@@ -69,11 +98,15 @@ python Main_OnlineLearningMPC.py --Live --Model GP
 
 The command raises an error explaining that live integration is illustrative and read-only and is not enabled for public execution. InfluxDB and OPC UA modules remain in the source to document the real-plant application boundary, but public commands do not connect to them.
 
-## 6. Locate inputs and outputs
+Setting private connector environment variables does not enable live execution;
+the public entry point still rejects `--Live` before constructing connectors or
+the controller.
+
+## 7. Locate inputs and outputs
 
 Bundled CSV inputs are loaded from `src/utils/data/`. The default neural model is `NNmodels/net_1020.mat`; FMU files are under `FMUs/`. Local execution writes generated results under `Solutions/<Model>/<ddmm>/` and exceptions under `LogsFolder/`; these locations are excluded from the public repository.
 
-## 7. Reproducibility levels
+## 8. Reproducibility levels
 
 1. **Inspection:** verify source structure, parameters, bundled input paths, model assets, and architecture without executing plant integrations.
 2. **Smoke test:** run `python smoke_test.py` in the declared Conda environment. This verifies imports only.

@@ -16,18 +16,19 @@
   - [x] solver e dipendenze accessibili.
 - [x] Aggiungere la validazione delle dimensioni di stati, ingressi e uscite.
 - [x] Aggiungere guard check per limiti dei parametri, dimensione del problema e dati mancanti.
-- [ ] Documentare in modo univoco i casi live, debug e test.
+- [x] Documentare in modo univoco i casi live, debug e test in
+  [public/execution-modes.md](public/execution-modes.md).
 
 ## 3. Test e validazione
 
-- [ ] Estendere lo smoke test per includere caricamento della configurazione e validazione di un percorso di esempio.
-- [ ] Aggiungere test per il parsing dei dati.
-- [ ] Aggiungere test per la validazione di input e metadati.
-- [ ] Aggiungere test per il comportamento di fallback del solver.
-- [ ] Correggere il test sugli identificativi sintetici della configurazione InfluxDB.
-- [ ] Uniformare il messaggio di errore della modalità live al test previsto, oppure aggiornare il test con il comportamento approvato.
-- [ ] Eseguire e mantenere una validazione finale automatizzata di import, compilazione, smoke test e test unitari.
-- [ ] Validare il percorso di simulazione FMU e registrare un baseline numerico approvato.
+- [x] Estendere lo smoke test per includere caricamento della configurazione e validazione di un percorso di esempio.
+- [x] Aggiungere test per il parsing dei dati.
+- [x] Aggiungere test per la validazione di input e metadati.
+- [x] Aggiungere test per il comportamento di fallback del solver.
+- [x] Correggere il test sugli identificativi sintetici della configurazione InfluxDB.
+- [x] Uniformare il messaggio di errore della modalità live al test previsto, oppure aggiornare il test con il comportamento approvato.
+- [x] Eseguire e mantenere una validazione finale automatizzata di import, compilazione, smoke test e test unitari.
+- [x] Validare il percorso di simulazione FMU e registrare un baseline numerico approvato.
 
 ## 4. Ambiente e riproducibilità
 

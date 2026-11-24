@@ -23,7 +23,7 @@
   "Meter": {
     "ns=0;s=PUBLIC.SYNTHETIC.READ_005": {
       "Type": "Energy",
-      "Measurament": "PUBLIC_SYNTHETIC",
+      "Measurement": "PUBLIC_SYNTHETIC",
       "Class": "Meter",
       "Zone": "PUBLIC_ZONE_02",
       "nomeFRER": "SYNTHETIC_READ_005",
