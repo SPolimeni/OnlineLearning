@@ -105,6 +105,9 @@ class MPC:
         self.sigma_prec = self.initial_sigma * np.ones((self.N, self.n_out))
 
         ### bayesian last layer ###
+        # The output-layer matrices are the prior parameters of the Bayesian
+        # last-layer model: ``theta = [U0; b0]`` maps the nonlinear feature
+        # vector to the three normalized plant outputs.
         # The trained network stores the last-layer weights in the MATLAB structure.
         # These are used to construct the Bayesian correction term around the mean
         # prediction and provide uncertainty-aware control inputs in the advanced modes.
@@ -304,6 +307,9 @@ class MPC:
         # P^GB = c_w (q^0 - q^EB) (T^s,GB - T^r,0) and
         # P^EB = c_w q^EB (T^s,EB - T^r,0). Here y[1, :] is T^r,0 and
         # y[2, :] is q^0; the first prediction uses the measured current state.
+        # Consequently, ``u[4, :]`` and ``u[5, :]`` are the two manipulated
+        # supply temperatures, while the gas flow is obtained algebraically as
+        # q^GB = q^0 - q^EB rather than being an independent decision variable.
         for j in range(0,self.N):
             ii = min(np.floor(j/self.Nb), self.N/self.Nb-1)
             if j==0:
@@ -646,6 +652,10 @@ class MPC:
                 ii=min(np.floor(j/Nb),N/Nb-1)
                 U[i,j]=(u[i,ii]-inp_bias[i]*casadi.MX.ones((1)))/inp_scale[i]
                 if i==n_inp-1:
+                    # The fifth NNARX input is the mixed supply temperature
+                    # T^s,0 = (q^EB T^s,EB + q^GB T^s,GB) / q^0.
+                    # It is reconstructed from the two manipulated boiler
+                    # temperatures and the predicted total flow.
                     if j==0:
                         U[i,j]= (((u[5,j]*q_eb+( xk[2,k] -q_eb*casadi.DM.ones(1))*u[4,j])/casadi.fmax(xk[2,k], 1e-6)) -inp_bias[i])/inp_scale[i]
                     else:
@@ -659,6 +669,10 @@ class MPC:
                     u_rnn[i,j]= (((uk[5,j]*q_eb+( xk[2,j] -q_eb*casadi.DM.ones(1))*uk[4,j])/xk[2,j]) -inp_bias[i])/inp_scale[i]
         
         ### Current State ###
+        # The 24-dimensional state stores three consecutive NNARX regressor
+        # blocks. Each block contains the three outputs and the five model
+        # inputs, which realizes the delayed regressor initialization used for
+        # the first predictions of the receding-horizon problem.
         initial_state=np.zeros([n_states,1])
         initial_state[0,:] =(xk[0,k-3]-out_bias[0])/out_scale[0]
         initial_state[1,:] = (xk[1,k-3]-out_bias[1])/out_scale[1]
@@ -702,6 +716,9 @@ class MPC:
         # We simulate the recurrent dynamics over the whole horizon using the current
         # state estimate and the candidate control sequence. The function returns the
         # predicted output trajectory together with the estimated uncertainty term.
+        # ``outputs`` is the nominal normalized NNARX trajectory; the active
+        # strategy later maps it either directly to ``y`` (NNARX), to
+        # ``y + e_hat`` (GP), or to a posterior last-layer prediction (BLL).
         states,outputs,Sigma=self.simulate_dynamics(k,initial_state, U[:,:], A, Bu, Bx, C, N,weights,n_states,ground_truth,theta)
 
         Y_pred, Y_RNN = self.strategy.predict_outputs(
@@ -760,6 +777,10 @@ class MPC:
         z_l2=z1+z2+z3
         e_vect=np.tanh(z_l2)
         #theta=casadi.vertcat(U0,b0)
+        # ``f_tilde = [features; 1]`` includes the bias feature, so the final
+        # linear projection is the NNARX output map
+        # y = theta^T f_tilde. In BLL mode theta is replaced by its posterior
+        # mean; the same feature vector also defines the predictive uncertainty.
         f_tilde=casadi.vertcat(e_vect,1)
         eta=theta.T@f_tilde
         sigma=np.sqrt((1+f_tilde.T@self.L_prev@f_tilde) * self.sigma_epsilon2)

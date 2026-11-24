@@ -77,6 +77,8 @@ class ModelStrategy:
     def predict_outputs(self, mpc, k, outputs, ys, u_rnn, U, ground_truth,
                          out_scale, out_bias, n_out, N, Y_pred, Y_RNN):
         """Denormalize the simulated NNARX outputs into physical units."""
+        # ``Y_RNN`` is the nominal NNARX trajectory; in the baseline strategy
+        # it is also the trajectory constrained and used by the MPC.
         for i in range(n_out):
             for j in range(N):
                 Y_RNN[i, j] = out_scale[i] * outputs[i, j] + out_bias[i] * np.ones([1, 1])
@@ -126,11 +128,15 @@ class GPStrategy(ModelStrategy):
         self.y_gp = np.empty((mpc.num_steps + mpc.N, mpc.n_out), dtype=object)
 
     def feedback_constraint(self, mpc, y_N, output_rnn):
+        # ``y_N`` contains the GP-corrected trajectory, while ``y_nnarx`` keeps
+        # the nominal NNARX prediction for residual construction and diagnostics.
         mpc.opti.subject_to(mpc.y == y_N[:, 0:mpc.N])
         mpc.opti.subject_to(mpc.y_nnarx == output_rnn[:, 0:mpc.N])
 
     def predict_outputs(self, mpc, k, outputs, ys, u_rnn, U, ground_truth,
                          out_scale, out_bias, n_out, N, Y_pred, Y_RNN):
+        # The GP residual is added in normalized coordinates before conversion
+        # to physical units, so Y_pred realizes y_tilde = y + e_hat.
         output_gp = self.gaussian_process(mpc, k, ys, outputs, u_rnn.T, U, ground_truth)
         output_gp = output_gp.transpose()
 
@@ -156,6 +162,9 @@ class GPStrategy(ModelStrategy):
         n_out=3
         N=mpc.N
         #### Training of GP ###
+        # Each training pair follows the residual-regression structure:
+        # delayed NNARX errors, inputs, and nominal outputs form the feature
+        # vector, while the measured one-step-ahead error is the target.
         x_k_1=[]
         x_k_2=[]
         x_k_3=[]
@@ -192,6 +201,8 @@ class GPStrategy(ModelStrategy):
         X_buffer_3=self.gp_buffer[ "X_buffer_3"]
 
         ### Reduction of the dataset ###
+        # The buffers implement the finite online dataset used by the GP; once
+        # the window is full, the oldest regressor/target pair is discarded.
         if len(X_buffer_1) > window_size-1:
             X_buffer_1.pop(0)
             X_buffer_2.pop(0)
@@ -566,6 +577,9 @@ class GPStrategy(ModelStrategy):
                     y_pred_mean=np.array(y_pred_mean)
                     yk=np.array(ys[k+1, j] )
 
+                    # The GP mean is the predicted NNARX residual in normalized
+                    # coordinates; recursive horizon prediction stores that
+                    # residual for the next error-regressor entry.
                     y_pred= yk + y_pred_mean
 
                     if j==0:
@@ -604,6 +618,8 @@ class BLLStrategy(ModelStrategy):
     def output_constraints(self, mpc, sigma_est):
         # Ts_min_supply <= Ts <= Ts_max, band widened by the uncertainty term and
         # relaxed by a slack variable when the uncertainty becomes too large.
+        # In normalized coordinates this is the robust interval
+        # lower + beta*sigma <= y <= upper - beta*sigma + slack.
         mpc.opti.subject_to((mpc.Ts_min_supply - mpc.out_bias[0]) / mpc.out_scale[0] + mpc.beta[0] * (mpc.sigmaK[:, 0]).T - mpc.slack_y[0, :] <= (mpc.y[0, :] - mpc.out_bias[0]) / mpc.out_scale[0])
         mpc.opti.subject_to((mpc.Ts_max - mpc.out_bias[0]) / mpc.out_scale[0] - mpc.beta[0] * (mpc.sigmaK[:, 0]).T + mpc.slack_y[0, :] >= (mpc.y[0, :] - mpc.out_bias[0]) / mpc.out_scale[0])
 
@@ -628,11 +644,17 @@ class BLLStrategy(ModelStrategy):
 
         if mpc.flag == 1:
             ### Exploration Constraints ###
+            # The exploration mode requires a minimum uncertainty level. The
+            # nonnegative ``slack_explo`` variables soften that requirement
+            # while their cost discourages unnecessary relaxation.
             mpc.opti.subject_to(mpc.beta[0] * (mpc.sigmaK[:, 0]).T >= mpc.epsilon[0] - mpc.slack_explo[0, :] / mpc.out_scale[0])
             mpc.opti.subject_to(mpc.beta[1] * (mpc.sigmaK[:, 1]).T >= mpc.epsilon[1] - mpc.slack_explo[1, :] / mpc.out_scale[1])
             mpc.opti.subject_to(mpc.beta[2] * (mpc.sigmaK[:, 2]).T >= mpc.epsilon[2] - mpc.slack_explo[2, :] / mpc.out_scale[2])
 
     def cost_expression(self, mpc, gamma_pred_gas, gamma_pred_el, alpha_slack, gamma_exp, gamma_slack):
+        # The energy and terminal-tracking terms are shared with the baseline
+        # formulation. BLL adds penalties for output-limit relaxation and, in
+        # exploration mode, for the slack used by the uncertainty requirement.
         mpc.opti.subject_to(
             mpc.J == gamma_pred_gas @ (mpc.energy_power_scale * mpc.Ts / mpc.seconds_per_hour * mpc.Pb[0, :].T / mpc.COP)
             + gamma_pred_el @ (mpc.energy_power_scale * mpc.Ts / mpc.seconds_per_hour * mpc.Pb[1, :].T / mpc.eff_EB)
@@ -774,6 +796,10 @@ class BLLStrategy(ModelStrategy):
 
 
         f_tilde= np.vstack([etaL, 1]) #10x1
+        # ``L_prev`` is the parameter covariance (the historical name is kept
+        # for compatibility), while ``Q_prev`` is the sufficient statistic for
+        # the posterior mean. The rank-one update below is the recursive
+        # Bayesian last-layer regression for the newly measured output.
         a=L_prec@f_tilde
         denom = 1 + (f_tilde.T @ L_prec @ f_tilde).item()
 
