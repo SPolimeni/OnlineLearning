@@ -31,7 +31,7 @@ class OfflineInvariantsTest(unittest.TestCase):
             self.assertEqual(params["n_inp"], 6)
             self.assertEqual(params["n_x"], 10)
             self.assertEqual(params["N"] % params["Nb"], 0)
-            self.assertEqual(params["nnarx_mat"], model_file("net_1020.mat"))
+            self.assertEqual(params["nnarx_mat"], model_file("NARX_net.mat"))
 
     def test_repository_data_parsing(self):
         params = build_parameters("GP")
@@ -96,8 +96,8 @@ class OfflineInvariantsTest(unittest.TestCase):
             )
 
     def test_repository_paths_are_independent_of_cwd(self):
-        self.assertTrue(model_file("net_1020.mat").startswith(REPO_ROOT))
-        self.assertTrue(fmu_file("DHN_MC_V3_FMU_EB_60.fmu").startswith(REPO_ROOT))
+        self.assertTrue(model_file("NARX_net.mat").startswith(REPO_ROOT))
+        self.assertTrue(fmu_file("DHN_sim.fmu").startswith(REPO_ROOT))
         self.assertEqual(
             solutions_dir("GP", "1410"),
             os.path.join(REPO_ROOT, "Solutions", "GP", "1410"),

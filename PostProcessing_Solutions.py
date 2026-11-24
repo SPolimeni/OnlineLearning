@@ -150,7 +150,7 @@ def load_solution_data(solution_folder):
     config_path = find_latest_file(solution_folder, 'config', '.csv')
     config = parse_config_file(config_path)
 
-    nnarx_mat = config.get('nnarx_mat', 'NNmodels/net_1020.mat')
+    nnarx_mat = config.get('nnarx_mat', 'NNmodels/NARX_net.mat')
     nnarx_mat = Path(str(nnarx_mat).replace(chr(92), '/').strip('"'))
     mat_path = Path(__file__).resolve().parent / nnarx_mat
     output_scaler = loadmat(mat_path)['output_scaler'][0, 0]

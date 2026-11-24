@@ -241,8 +241,8 @@ def build_parameters(model="GP"):
         and the prediction horizon ``N`` is 12 steps.
     """
     
-    price_data_path = data_file("20250501_20250501_MGP_PrezziZonali_Nord.csv")
-    load_data_path = data_file("DHN_ground_truth_shifted.csv")
+    price_data_path = data_file("DayAhead_ZonalPrices.csv")
+    load_data_path = data_file("DHN_ground_truth.csv")
     _require_file(price_data_path, "electricity-price data")
     _require_file(load_data_path, "heat-load data")
 
@@ -303,7 +303,7 @@ def build_parameters(model="GP"):
             [60.12344, 60.224037, 60.187595, 60.183292],
             [2.7702346, 2.7731984, 2.7713318, 2.7692516],
         ]),
-        "debug_fmu": "DHN_MC_V3_FMU_EB_60.fmu",
+        "debug_fmu": "DHN_sim.fmu",
         "control_power_scale": -1e-3,
         "energy_power_scale": 1 / 1000,
         "exploration_slack_tolerance": 1e-3,
@@ -331,7 +331,7 @@ def build_parameters(model="GP"):
         "late_slack_weight": 1e-3,
         "bnn_slack_max": np.array([50, 50, 50]),
         "bnn_initial_slack_max": np.array([5, 1, 3]),
-        "nnarx_mat": model_file("net_1020.mat"),
+        "nnarx_mat": model_file("NARX_net.mat"),
         "c_el": load_electricity_prices(price_data_path),
         "Potenza": load_heat_loads(load_data_path),
     }

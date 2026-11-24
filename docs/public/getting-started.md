@@ -76,7 +76,7 @@ Debug mode is the safe default. The explicit form is:
 python Main_OnlineLearningMPC.py --Debug --Model GP
 ```
 
-The runner loads `FMUs/DHN_MC_V3_FMU_EB_60.fmu`, initializes startup buffers, solves successive MPC steps, and sends generated controls back to the FMU. Use `NNARX` or `BLL` in place of `GP` to exercise the other strategy implementations. Debug execution is not a live-plant test and should not be described as exact article reproduction without a fixed baseline, asset hash, environment record, and owner-approved tolerances.
+The runner loads `FMUs/DHN_sim.fmu`, initializes startup buffers, solves successive MPC steps, and sends generated controls back to the FMU. Use `NNARX` or `BLL` in place of `GP` to exercise the other strategy implementations. Debug execution is not a live-plant test and should not be described as exact article reproduction without a fixed baseline, asset hash, environment record, and owner-approved tolerances.
 
 Validate the reduced GP debug baseline separately:
 
@@ -104,7 +104,7 @@ the controller.
 
 ## 7. Locate inputs and outputs
 
-Bundled CSV inputs are loaded from `src/utils/data/`. The default neural model is `NNmodels/net_1020.mat`; FMU files are under `FMUs/`. Local execution writes generated results under `Solutions/<Model>/<ddmm>/` and exceptions under `LogsFolder/`; these locations are excluded from the public repository.
+Bundled CSV inputs are loaded from `src/utils/data/`. The default neural model is `NNmodels/NARX_net.mat`; FMU files are under `FMUs/`. Local execution writes generated results under `Solutions/<Model>/<ddmm>/` and exceptions under `LogsFolder/`; these locations are excluded from the public repository.
 
 ## 8. Reproducibility levels
 

@@ -75,7 +75,7 @@ The debug command is an FMU simulation and does not intentionally use the live I
 python Main_OnlineLearningMPC.py --Model GP
 ```
 
-The runner loads `FMUs/DHN_MC_V3_FMU_EB_60.fmu`, seeds startup buffers, executes the controller loop, and feeds generated controls back to the FMU. pyFMI support is Windows-dependent in the current implementation. This command is a debug simulation, not proof of numerical reproduction of published results; no fixed trajectory baseline, FMU hash, or full provenance record is currently documented.
+The runner loads `FMUs/DHN_sim.fmu`, seeds startup buffers, executes the controller loop, and feeds generated controls back to the FMU. pyFMI support is Windows-dependent in the current implementation. This command is a debug simulation, not proof of numerical reproduction of published results; no fixed trajectory baseline, FMU hash, or full provenance record is currently documented.
 
 ## Live integration boundary
 
@@ -89,7 +89,7 @@ The command raises an error stating that live integration is illustrative and re
 
 ## Input data and trained models
 
-The parameter builder loads bundled CSV files from `src/utils/data/`, including electricity-price and heat-load data. The default neural model is `NNmodels/net_1020.mat`; additional MAT files and model directories are present in `NNmodels/`. The selected model, input ordering, normalization, units, and asset provenance must be recorded with any scientific run. Redistribution rights and checksums for the data, MAT files, and FMUs have not been established in this repository.
+The parameter builder loads `src/utils/data/DayAhead_ZonalPrices.csv` and `src/utils/data/DHN_ground_truth.csv`. The default neural model is `NNmodels/NARX_net.mat`; additional MAT files and model directories are present in `NNmodels/`. The selected model, input ordering, normalization, units, and asset provenance must be recorded with any scientific run. Redistribution rights and checksums for the data, MAT files, and FMUs have not been established in this repository.
 
 ## Outputs and result files
 
