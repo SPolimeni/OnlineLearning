@@ -47,13 +47,13 @@ class ModelStrategy:
         mpc.opti.subject_to(mpc.m_max >= mpc.y[2, :])
         mpc.opti.subject_to(mpc.y[0, :] >= mpc.Ts_min_supply - mpc.T_slack)
         mpc.opti.subject_to(mpc.T_slack >= 0)
-        mpc.opti.subject_to(mpc.T_slack <= 20)
+        mpc.opti.subject_to(mpc.T_slack <= mpc.temperature_slack_max)
 
     def cost_expression(self, mpc, gamma_pred_gas, gamma_pred_el, alpha_slack, gamma_exp, gamma_slack):
         """Define the J == ... cost constraint for this model."""
         mpc.opti.subject_to(
-            mpc.J == gamma_pred_gas @ (1 / 1000 * mpc.Ts / 3600 * mpc.Pb[0, :].T / mpc.COP)
-            + gamma_pred_el @ (1 / 1000 * mpc.Ts / 3600 * mpc.Pb[1, :].T / mpc.eff_EB)
+            mpc.J == gamma_pred_gas @ (mpc.energy_power_scale * mpc.Ts / mpc.seconds_per_hour * mpc.Pb[0, :].T / mpc.COP)
+            + gamma_pred_el @ (mpc.energy_power_scale * mpc.Ts / mpc.seconds_per_hour * mpc.Pb[1, :].T / mpc.eff_EB)
             + mpc.gamma * (mpc.y[0, mpc.N - 1] - mpc.T_ref * casadi.MX.ones((1, 1))) ** 2
             + mpc.T_slack @ mpc.T_slack.T * alpha_slack
         )
@@ -618,17 +618,13 @@ class BNNExpStrategy(ModelStrategy):
         mpc.opti.subject_to(mpc.sigmaK == sigma_est)
 
         for i in range(0, mpc.n_out):
-            mpc.opti.subject_to(mpc.slack_y[i, :] >= 1e-8)
+            mpc.opti.subject_to(mpc.slack_y[i, :] >= mpc.minimum_slack)
 
-            mpc.opti.subject_to(mpc.slack_y[0, :] <= 50 / mpc.out_scale[0])
-            mpc.opti.subject_to(mpc.slack_y[1, :] <= 50 / mpc.out_scale[1])
-            mpc.opti.subject_to(mpc.slack_y[2, :] <= 50 / mpc.out_scale[2])
-            mpc.opti.subject_to(mpc.slack_y[0, :2] <= 5 / mpc.out_scale[0])
-            mpc.opti.subject_to(mpc.slack_y[1, :2] <= 1 / mpc.out_scale[1])
-            mpc.opti.subject_to(mpc.slack_y[2, :2] <= 3 / mpc.out_scale[2])
+            mpc.opti.subject_to(mpc.slack_y[i, :] <= mpc.bnn_slack_max[i] / mpc.out_scale[i])
+            mpc.opti.subject_to(mpc.slack_y[i, :2] <= mpc.bnn_initial_slack_max[i] / mpc.out_scale[i])
 
-            mpc.opti.subject_to(mpc.slack_explo[i, :] >= 1e-6)
-            mpc.opti.subject_to(mpc.slack_explo[i, :] <= 1e1)
+            mpc.opti.subject_to(mpc.slack_explo[i, :] >= mpc.exploration_min_slack)
+            mpc.opti.subject_to(mpc.slack_explo[i, :] <= mpc.exploration_max_slack)
 
         if mpc.flag == 1:
             ### Exploration Constraints ###
@@ -638,13 +634,13 @@ class BNNExpStrategy(ModelStrategy):
 
     def cost_expression(self, mpc, gamma_pred_gas, gamma_pred_el, alpha_slack, gamma_exp, gamma_slack):
         mpc.opti.subject_to(
-            mpc.J == gamma_pred_gas @ (1 / 1000 * mpc.Ts / 3600 * mpc.Pb[0, :].T / mpc.COP)
-            + gamma_pred_el @ (1 / 1000 * mpc.Ts / 3600 * mpc.Pb[1, :].T / mpc.eff_EB)
+            mpc.J == gamma_pred_gas @ (mpc.energy_power_scale * mpc.Ts / mpc.seconds_per_hour * mpc.Pb[0, :].T / mpc.COP)
+            + gamma_pred_el @ (mpc.energy_power_scale * mpc.Ts / mpc.seconds_per_hour * mpc.Pb[1, :].T / mpc.eff_EB)
             + mpc.gamma * (mpc.y[0, mpc.N - 1] - mpc.T_ref * casadi.MX.ones((1, 1))) ** 2
             + gamma_slack[0] * mpc.slack_y[0, :4] @ mpc.slack_y[0, :4].T
             + gamma_slack[1] * mpc.slack_y[1, :4] @ mpc.slack_y[1, :4].T
             + gamma_slack[1] * mpc.slack_y[2, :4] @ mpc.slack_y[2, :4].T
-            + 1e-3 * (
+            + mpc.late_slack_weight * (
                 gamma_slack[0] * mpc.slack_y[0, 4:] @ mpc.slack_y[0, 4:].T
                 + gamma_slack[1] * mpc.slack_y[1, 4:] @ mpc.slack_y[1, 4:].T
                 + gamma_slack[2] * mpc.slack_y[2, 4:] @ mpc.slack_y[2, 4:].T
@@ -654,7 +650,7 @@ class BNNExpStrategy(ModelStrategy):
 
     def warm_start_extra_variables(self, mpc):
         for i in range(mpc.n_out):
-            mpc.opti.set_initial(mpc.sigmaK[:, i], 0.05 * np.ones([mpc.N, 1]))
+            mpc.opti.set_initial(mpc.sigmaK[:, i], mpc.initial_sigma * np.ones([mpc.N, 1]))
         mpc.opti.set_initial(mpc.slack_explo, np.zeros([mpc.n_out, mpc.N]))
         mpc.opti.set_initial(mpc.slack_y, np.zeros([mpc.n_out, mpc.N]))
 

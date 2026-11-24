@@ -37,6 +37,8 @@ The entry point is [Main_OnlineLearningMPC.py](../../Main_OnlineLearningMPC.py).
 
 The runtime parameter dictionary includes dimensions, timing, operating limits, the default MAT model path, and bundled electricity-price and heat-load arrays. These values are source configuration, not user-editable deployment settings exposed by a configuration file.
 
+Before the controller is constructed, the command-line entry point runs a configuration preflight. It checks the required model and FMU files, validates the loaded CSV arrays, verifies the MAT model structure, imports the required runtime dependencies, and confirms that CasADi can access IPOPT. A failure stops startup with an explicit list of the failed checks.
+
 ## 3. Run the smoke test
 
 This is an import and wiring check. It does not start the controller, load the FMU, contact InfluxDB or OPC UA, or establish numerical reproducibility.

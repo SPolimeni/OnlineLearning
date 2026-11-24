@@ -40,7 +40,7 @@ class ControllerRunner:
         self.controller = MPC(params)
         self.controller.Opts = self.opts
         self.controller.Param = params
-        self.controller.total_time = params["tot_hours"] * 3600
+        self.controller.total_time = params["tot_hours"] * params["seconds_per_hour"]
         self.controller.time_step = params["Ts"]
         self.controller.num_steps = self.controller.total_time // self.controller.time_step + 1
         self.controller.t_step = 0
@@ -58,15 +58,13 @@ class ControllerRunner:
         """Read the latest state from the plant or the debug fixture."""
         controller = self.controller
         if self.opts["Debug"]:
-            delivery = [71.06958, 70.96986, 71.104965, 71.12856]
-            return_temp = [60.12344, 60.224037, 60.187595, 60.183292]
-            flow = [2.7702346, 2.7731984, 2.7713318, 2.7692516]
+            debug_state = controller.debug_initial_state
             if controller.t_step < controller.Param["T_C0"]:
-                index = min(controller.t_step, len(delivery) - 1)
+                index = min(controller.t_step, debug_state.shape[1] - 1)
                 controller.y_dict = {
-                    "T_delivery": delivery[index],
-                    "T_return": return_temp[index],
-                    "flow": flow[index],
+                    "T_delivery": debug_state[0, index],
+                    "T_return": debug_state[1, index],
+                    "flow": debug_state[2, index],
                 }
             else:
                 controller.y_dict = {
@@ -88,19 +86,19 @@ class ControllerRunner:
             index = controller.t_step - 1
             get_value = controller.opti.value if solved else controller.opti.debug.value
             data_map = controller.SetPointsWriter.DataMap
-            data_map["Power_HL1"]["Value"] = -1e-3 * get_value(controller.u_out[0, index])
-            data_map["Power_HL2"]["Value"] = -1e-3 * get_value(controller.u_out[1, index])
-            data_map["Power_HL3"]["Value"] = -1e-3 * get_value(controller.u_out[2, index])
-            data_map["Power_HL4"]["Value"] = -1e-3 * get_value(controller.u_out[3, index])
+            data_map["Power_HL1"]["Value"] = controller.control_power_scale * get_value(controller.u_out[0, index])
+            data_map["Power_HL2"]["Value"] = controller.control_power_scale * get_value(controller.u_out[1, index])
+            data_map["Power_HL3"]["Value"] = controller.control_power_scale * get_value(controller.u_out[2, index])
+            data_map["Power_HL4"]["Value"] = controller.control_power_scale * get_value(controller.u_out[3, index])
             data_map["T_out_GB"]["Value"] = get_value(controller.u_out[4, index])
             data_map["T_out_EB"]["Value"] = get_value(controller.u_out[5, index])
 
             for key in ("Power_HL1", "Power_HL2", "Power_HL3", "Power_HL4"):
-                if abs(data_map[key]["Value"]) < 10:
-                    data_map[key]["Value"] = 32
+                if abs(data_map[key]["Value"]) < controller.plant_power_minimum:
+                    data_map[key]["Value"] = controller.plant_power_fallback
             for key in ("T_out_GB", "T_out_EB"):
-                if data_map[key]["Value"] < 45:
-                    data_map[key]["Value"] = 72
+                if data_map[key]["Value"] < controller.outlet_temperature_minimum:
+                    data_map[key]["Value"] = controller.outlet_temperature_fallback
         except Exception as error:
             self._report_exception("SetPointsToDERTF", error)
 
@@ -108,12 +106,12 @@ class ControllerRunner:
         if controller.SetPointsWriter.client is None:
             controller.SetPointsWriter.connect()
 
-        for attempt in range(5):
+        for attempt in range(controller.opcua_write_attempts):
             try:
                 controller.SetPointsWriter.write_node(node_data)
                 break
             except Exception as error:
-                if attempt == 4:
+                if attempt == controller.opcua_write_attempts - 1:
                     self._report_exception("OPC UA write", error)
                 else:
                     try:
@@ -121,7 +119,7 @@ class ControllerRunner:
                     except Exception:
                         pass
                     controller.SetPointsWriter.connect()
-                    time.sleep(1)
+                    time.sleep(controller.opcua_retry_delay_seconds)
 
     def set_points_to_fmu(self):
         """Send the generated control action to the FMU simulation."""
@@ -174,7 +172,7 @@ class ControllerRunner:
 
         try:
             flag = 1
-            slack_tolerance = 1e-3
+            slack_tolerance = controller.exploration_slack_tolerance
             result = controller.mpc_controller(
                 index, controller.Param["T_C0"], controller.y_out, controller.u_out,
                 controller.y_rnn_out, flag,
@@ -223,16 +221,16 @@ class ControllerRunner:
         controller.Pb_pred_out[0, index] = controller.Pb_prec[0, 0]
         controller.Pb_pred_out[1, index] = controller.Pb_prec[1, 0]
 
-        gamma_pred_gas = 0.034
-        cop = 0.8
-        efficiency_eb = 0.8
-        row = int(np.floor(index / 3))
+        gamma_pred_gas = controller.c_gas
+        cop = controller.COP
+        efficiency_eb = controller.eff_EB
+        row = int(np.floor(index / controller.Nb))
         electricity_cost = controller.ensure2D(controller.c_el)
-        gamma_pred_el = electricity_cost[row, 0] / 1000
-        time_step = 300
+        gamma_pred_el = electricity_cost[row, 0] * controller.energy_power_scale
+        time_step = controller.time_step
         controller.final_cost[index] = (
-            gamma_pred_gas * (1 / 1000 * time_step / 3600 * controller.Pb_pred_out[0, index] / cop)
-            + gamma_pred_el * (1 / 1000 * time_step / 3600 * controller.Pb_pred_out[1, index] / efficiency_eb)
+            gamma_pred_gas * (controller.energy_power_scale * time_step / controller.seconds_per_hour * controller.Pb_pred_out[0, index] / cop)
+            + gamma_pred_el * (controller.energy_power_scale * time_step / controller.seconds_per_hour * controller.Pb_pred_out[1, index] / efficiency_eb)
         )
         controller.t_step += 1
 
@@ -289,12 +287,12 @@ class ControllerRunner:
 
     def _configure_fmu(self):
         controller = self.controller
-        controller.fmu = load_fmu(fmu_file("DHN_MC_V3_FMU_EB_60.fmu"))
+        controller.fmu = load_fmu(fmu_file(controller.debug_fmu))
         fmu_options = controller.fmu.simulate_options()
-        fmu_options["CVode_options"]["rtol"] = 1e-4
-        fmu_options["CVode_options"]["atol"] = 1e-4
+        fmu_options["CVode_options"]["rtol"] = controller.fmu_relative_tolerance
+        fmu_options["CVode_options"]["atol"] = controller.fmu_absolute_tolerance
         controller.fmu_opts = fmu_options
-        init_steps = min(5, controller.num_steps, controller.N)
+        init_steps = min(controller.fmu_initial_steps, controller.num_steps, controller.N)
         controller.y_out[:, :init_steps] = controller.y_prec[:, :init_steps]
         controller.u_out[:, :init_steps] = controller.u_prec[:, :init_steps]
         controller.y_pred_out[:, 0] = controller.y_prec[:, 0]

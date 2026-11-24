@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m py_compile class_MPC.py model_strategies.py)",
+      "Bash(python -m py_compile Main_OnlineLearningMPC.py)"
+    ]
+  }
+}

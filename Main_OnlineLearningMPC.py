@@ -8,7 +8,7 @@ import argparse
 # Keep direct execution from the repository root working without installation.
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
 
-from config.parameters import build_parameters
+from config.parameters import SUPPORTED_MODELS, build_parameters, validate_parameters
 from runtime.controller_runner import ControllerRunner
 
 
@@ -27,7 +27,7 @@ def parse_args(argv=None):
         "--Model",
         type=str,
         default="GP",
-        choices=("NNARX", "GP", "BNNExp"),
+        choices=SUPPORTED_MODELS,
         help="Set the model type: 'NNARX', 'GP', or 'BNNExp'",
     )
     parser.add_argument(
@@ -58,7 +58,8 @@ def main(argv=None):
             "Live integration is illustrative and read-only; it is not enabled "
             "for public execution."
         )
-    parameters  = build_parameters(args.Model)
+    parameters = build_parameters(args.Model)
+    validate_parameters(parameters)
     ControllerRunner(parameters, debug=args.Debug).run()
 
 

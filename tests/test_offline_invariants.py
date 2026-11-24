@@ -7,7 +7,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "src"))
 
 from class_MPC import _STRATEGY_FACTORY
-from config.parameters import build_parameters
+from config.parameters import build_parameters, validate_parameters
 from project_paths import REPO_ROOT, fmu_file, model_file, solutions_dir
 
 
@@ -24,6 +24,9 @@ class OfflineInvariantsTest(unittest.TestCase):
 
     def test_strategy_selection_contract(self):
         self.assertEqual(set(_STRATEGY_FACTORY), {"NNARX", "GP", "BNNExp"})
+
+    def test_configuration_preflight(self):
+        validate_parameters(build_parameters("GP"))
 
     def test_repository_paths_are_independent_of_cwd(self):
         self.assertTrue(model_file("net_1020.mat").startswith(REPO_ROOT))

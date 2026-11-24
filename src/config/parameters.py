@@ -1,8 +1,84 @@
 """Runtime parameter construction for the online-learning MPC controller."""
 
-import numpy as np
+import importlib
+import os
 
-from project_paths import data_file, model_file
+import numpy as np
+from scipy.io import loadmat
+
+from project_paths import data_file, fmu_file, model_file
+
+
+SUPPORTED_MODELS = ("NNARX", "GP", "BNNExp")
+
+
+def _require_file(path, description):
+    if not os.path.isfile(path):
+        raise FileNotFoundError(
+            f"Required {description} was not found: {path}"
+        )
+
+
+def validate_parameters(params):
+    """Validate required assets, loaded data, model structure, and dependencies."""
+    errors = []
+
+    required_files = (
+        (params["nnarx_mat"], "neural-network model"),
+        (fmu_file(params["debug_fmu"]), "debug FMU"),
+    )
+    for path, description in required_files:
+        if not os.path.isfile(path):
+            errors.append(f"Required {description} was not found: {path}")
+
+    for name, value in (
+        ("c_el", params["c_el"]),
+        ("Potenza", params["Potenza"]),
+    ):
+        array = np.asarray(value)
+        if array.size == 0:
+            errors.append(f"Configured data '{name}' is empty")
+        elif not np.all(np.isfinite(array)):
+            errors.append(f"Configured data '{name}' contains non-finite values")
+
+    if np.asarray(params["c_el"]).ndim != 1:
+        errors.append("Configured electricity-price data 'c_el' must be one-dimensional")
+    if np.asarray(params["Potenza"]).ndim != 2 or np.asarray(params["Potenza"]).shape[1] != 4:
+        errors.append("Configured load data 'Potenza' must have four columns")
+
+    if params["Model"] not in SUPPORTED_MODELS:
+        errors.append(
+            f"Unsupported model '{params['Model']}'. "
+            f"Supported models: {', '.join(SUPPORTED_MODELS)}"
+        )
+
+    if not errors:
+        try:
+            model_data = loadmat(params["nnarx_mat"])
+        except (OSError, TypeError, ValueError) as error:
+            errors.append(f"Neural-network model could not be loaded: {error}")
+        else:
+            for key in ("layers", "output_scaler"):
+                if key not in model_data:
+                    errors.append(f"Loaded neural-network model is missing '{key}'")
+
+    for module_name in ("casadi", "torch", "gpytorch", "pyfmi"):
+        try:
+            module = importlib.import_module(module_name)
+        except ImportError as error:
+            errors.append(f"Required dependency '{module_name}' is unavailable: {error}")
+        else:
+            if module_name == "casadi":
+                try:
+                    solver_available = module.has_nlpsol("ipopt")
+                except (AttributeError, RuntimeError) as error:
+                    errors.append(f"IPOPT solver availability could not be checked: {error}")
+                else:
+                    if not solver_available:
+                        errors.append("CasADi IPOPT solver is not available")
+
+    if errors:
+        raise RuntimeError("Configuration preflight failed:\n- " + "\n- ".join(errors))
 
 
 def build_parameters(model="GP"):
@@ -19,15 +95,24 @@ def build_parameters(model="GP"):
         and the prediction horizon ``N`` is 12 steps.
     """
     
+    price_data_path = data_file("20250501_20250501_MGP_PrezziZonali_Nord.csv")
+    load_data_path = data_file("DHN_ground_truth_shifted.csv")
+    _require_file(price_data_path, "electricity-price data")
+    _require_file(load_data_path, "heat-load data")
+
     return {
         "Nb":               3,          # control updates using the block size Nb
         "n_out":            3,
         "n_x":              10,
         "n_inp":            6,
         "tot_hours":        5,
+        "seconds_per_hour": 3600,
         "Ts":               300,
         "N":                12,
+        "specific_heat_capacity": 4186,
         "q_eb":             3 / 3.6,
+        "temperature_slack_max": 20,
+        "temperature_delta_max": 5,
         "Tr_max":           66,
         "Tr_min":           45,
         "Ts_max":           75,
@@ -64,15 +149,51 @@ def build_parameters(model="GP"):
         "Model":            model,
         "T_C0":             4,
         "n_slack":          1,
+        "initial_state": np.array([70.2690912858482, 60.786245068179, 2.5]),
+        "initial_control": np.array([-32000, -32000, -32000, -32000, 70.5, 70.0]),
+        "initial_sigma":   0.05,
+        "debug_initial_state": np.array([
+            [71.06958, 70.96986, 71.104965, 71.12856],
+            [60.12344, 60.224037, 60.187595, 60.183292],
+            [2.7702346, 2.7731984, 2.7713318, 2.7692516],
+        ]),
+        "debug_fmu": "DHN_MC_V3_FMU_EB_60.fmu",
+        "control_power_scale": -1e-3,
+        "energy_power_scale": 1 / 1000,
+        "exploration_slack_tolerance": 1e-3,
+        "plant_power_minimum": 10,
+        "plant_power_fallback": 32,
+        "outlet_temperature_minimum": 45,
+        "outlet_temperature_fallback": 72,
+        "solver_max_iterations":  int(1e4),
+        "solver_print_level":     3,
+        "solver_relaxed_print_level": 0,
+        "solver_complementarity_tolerance": 1e-5,
+        "solver_relaxed_complementarity_tolerance": 1e-4,
+        "solver_acceptable_tolerance": 1e-4,
+        "solver_acceptable_iterations": 10,
+        "solver_mu_strategy": "adaptive",
+        "solver_relaxed_objective_scale": 0.01,
+        "fmu_relative_tolerance": 1e-4,
+        "fmu_absolute_tolerance": 1e-4,
+        "fmu_initial_steps": 5,
+        "opcua_write_attempts": 5,
+        "opcua_retry_delay_seconds": 1,
+        "minimum_slack": 1e-8,
+        "exploration_min_slack": 1e-6,
+        "exploration_max_slack": 1e1,
+        "late_slack_weight": 1e-3,
+        "bnn_slack_max": np.array([50, 50, 50]),
+        "bnn_initial_slack_max": np.array([5, 1, 3]),
         "nnarx_mat": model_file("net_1020.mat"),
         "c_el": np.genfromtxt(
-            data_file("20250501_20250501_MGP_PrezziZonali_Nord.csv"),
+            price_data_path,
             delimiter=";",
             usecols=(2),
             skip_header=2,
         ),
         "Potenza": np.genfromtxt(
-            data_file("DHN_ground_truth_shifted.csv"),
+            load_data_path,
             delimiter=",",
             usecols=(3, 4, 5, 6),
             skip_header=28,

@@ -107,7 +107,7 @@ The available `smoke_test.py` is an import check. The repository does not curren
 
 ## Known limitations
 
-The application is plant-specific, uses hard-coded runtime parameters, and depends on mutable model state for GP and BNNExp. The live path is deployment-specific. Licensing, provenance, redistribution rights, and anonymization status for several artifacts remain unresolved.
+The application is plant-specific, uses source-controlled runtime parameters from the central configuration builder, and depends on mutable model state for GP and BNNExp. The live path is deployment-specific. Licensing, provenance, redistribution rights, and anonymization status for several artifacts remain unresolved.
 
 ## Security and configuration notes
 
