@@ -9,7 +9,7 @@ from scipy.io import loadmat
 from project_paths import data_file, fmu_file, model_file
 
 
-SUPPORTED_MODELS = ("NNARX", "GP", "BNNExp")
+SUPPORTED_MODELS = ("NNARX", "GP", "BLL")
 
 
 def _require_file(path, description):
@@ -19,9 +19,83 @@ def _require_file(path, description):
         )
 
 
+def validate_parameter_guards(params):
+    """Validate parameter bounds and the minimum problem/data dimensions."""
+    errors = []
+
+    positive_parameters = (
+        "n_out", "n_x", "n_inp", "tot_hours", "seconds_per_hour",
+        "Ts", "N", "Nb", "specific_heat_capacity", "q_eb",
+        "COP", "eff_EB", "n_slack",
+    )
+    for name in positive_parameters:
+        if params[name] <= 0:
+            errors.append(f"Parameter '{name}' must be greater than zero")
+
+    if params["N"] % params["Nb"] != 0:
+        errors.append("Parameters 'N' and 'Nb' must be divisible")
+
+    bounds = (
+        ("Tr_min", "Tr_max"),
+        ("Ts_min_eb", "Ts_max_eb"),
+        ("Ts_min_gb", "Ts_max_gb"),
+        ("Ts_min_supply", "Ts_max"),
+        ("m_min", "m_max"),
+        ("Pb_min", "Pb_max"),
+        ("Pb_min_eb", "Pb_max_eb"),
+    )
+    for lower_name, upper_name in bounds:
+        if params[lower_name] > params[upper_name]:
+            errors.append(
+                f"Parameter '{lower_name}' cannot be greater than '{upper_name}'"
+            )
+
+    total_time = params["tot_hours"] * params["seconds_per_hour"]
+    num_steps = total_time // params["Ts"] + 1
+    minimum_load_rows = num_steps + params["N"] - params["Nb"]
+    load_data = np.asarray(params["Potenza"])
+    if load_data.ndim != 2 or load_data.shape[1] != 4:
+        errors.append("Parameter 'Potenza' must have shape (rows, 4)")
+    elif load_data.shape[0] < minimum_load_rows:
+        errors.append(
+            f"Parameter 'Potenza' has {load_data.shape[0]} rows; "
+            f"at least {minimum_load_rows} are required for the configured horizon"
+        )
+
+    for name, value in (("c_el", params["c_el"]), ("Potenza", params["Potenza"])):
+        array = np.asarray(value)
+        if array.size == 0:
+            errors.append(f"Parameter '{name}' cannot be empty")
+        elif not np.all(np.isfinite(array)):
+            errors.append(f"Parameter '{name}' contains non-finite values")
+
+    if errors:
+        raise ValueError("Parameter guard validation failed:\n- " + "\n- ".join(errors))
+
+
 def validate_parameters(params):
     """Validate required assets, loaded data, model structure, and dependencies."""
     errors = []
+
+    try:
+        validate_parameter_guards(params)
+    except ValueError as error:
+        errors.append(str(error))
+
+    dimension_checks = (
+        ("initial_state", params["initial_state"], (params["n_out"],)),
+        ("initial_control", params["initial_control"], (params["n_inp"],)),
+        ("debug_initial_state", params["debug_initial_state"], (params["n_out"], 4)),
+    )
+    for name, value, expected_shape in dimension_checks:
+        actual_shape = np.asarray(value).shape
+        if actual_shape != expected_shape:
+            errors.append(
+                f"Configured '{name}' has shape {actual_shape}; "
+                f"expected {expected_shape}"
+            )
+    if params["N"] <= 0 or params["Nb"] <= 0 or params["N"] % params["Nb"] != 0:
+        errors.append("Configured prediction horizon N must be positive and divisible by Nb")
 
     required_files = (
         (params["nnarx_mat"], "neural-network model"),
@@ -86,7 +160,7 @@ def build_parameters(model="GP"):
 
     Args:
         model: Strategy name consumed by ``MPC``. Supported values are
-            ``"NNARX"``, ``"GP"``, and ``"BNNExp"``.
+            ``"NNARX"``, ``"GP"``, and ``"BLL"``.
 
     Returns:
         A dictionary containing controller dimensions, timing and operating

@@ -162,7 +162,7 @@ class ControllerRunner:
         controller.y_out[2, index] = controller.y_dict["flow"]
 
         try:
-            if controller.Param["Model"] == "BNNExp" and index > controller.Param["T_C0"] - 1:
+            if controller.Param["Model"] == "BLL" and index > controller.Param["T_C0"] - 1:
                 controller.theta_current = controller.bayesian_correction(
                     index, controller.y_out, controller.u_out
                 )
@@ -213,7 +213,7 @@ class ControllerRunner:
         else:
             controller.s_out[:, index] = (
                 controller.slack[:, 0]
-                if controller.Param["Model"] == "BNNExp"
+                if controller.Param["Model"] == "BLL"
                 else controller.slack
             )
         controller.y_rnn_out[index + 1, :] = controller.y_nnarx[:, 0]
@@ -247,7 +247,7 @@ class ControllerRunner:
     def run(self):
         """Initialize the selected execution mode and run it."""
         controller = self.controller
-        if controller.Param["Model"] == "BNNExp":
+        if controller.Param["Model"] == "BLL":
             controller.y_rnn_out[0, :] = controller.y_prec[:, 0]
             controller.y_pred_out[:, 0] = controller.y_prec[:, 0]
 
@@ -316,7 +316,7 @@ def initialize_buffers(controller, params):
     The main state and control histories have shapes
     ``(n_out, num_steps)`` and ``(n_inp, num_steps)`` respectively. Prediction
     histories use the same output ordering as the controller, while
-    ``theta_history`` has shape ``(num_steps, n_x, n_out)``. BNNExp stores its
+    ``theta_history`` has shape ``(num_steps, n_x, n_out)``. BLL stores its
     output-sized slack history; the other strategies store ``n_slack`` slack
     values per step.
     """
@@ -330,7 +330,7 @@ def initialize_buffers(controller, params):
     controller.Pb_pred_out = np.zeros([2, controller.num_steps])
     controller.s_out = (
         np.zeros([params["n_out"], controller.num_steps])
-        if params["Model"] == "BNNExp"
+        if params["Model"] == "BLL"
         else np.zeros([params["n_slack"], controller.num_steps])
     )
     controller.final_cost = np.zeros([controller.num_steps])

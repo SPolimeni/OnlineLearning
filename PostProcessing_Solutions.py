@@ -265,7 +265,7 @@ def load_solution_data(solution_folder):
 
 def main(solution_folder=None):
     if solution_folder is None:
-        solution_subfolder = 'BNNExp'
+        solution_subfolder = 'BLL'
         solution_run = '1105'
         solution_folder = Path(__file__).resolve().parent / 'Solutions' / solution_subfolder / solution_run
     plots_folder = ensure_plots_folder(solution_folder)
@@ -560,9 +560,9 @@ def main(solution_folder=None):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Post-process saved BNNExp solution data.')
+    parser = argparse.ArgumentParser(description='Post-process saved BLL solution data.')
     parser.add_argument('solution_folder', nargs='?', default=None, help='Path to the solution folder to load')
-    parser.add_argument('--solution-subfolder', default='BNNExp', help='Subfolder under Solutions to use when no explicit solution folder is provided')
+    parser.add_argument('--solution-subfolder', default='BLL', help='Subfolder under Solutions to use when no explicit solution folder is provided')
     parser.add_argument('--solution-run', default='1105', help='Run folder name under the chosen subfolder when no explicit solution folder is provided')
     args = parser.parse_args()
 

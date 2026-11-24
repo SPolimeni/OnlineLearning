@@ -26,11 +26,11 @@ For the detailed data and control flow, see the [public architecture documentati
 
 ## Supported model strategies
 
-The `--Model` option accepts `NNARX`, `GP`, or `BNNExp`; the default is `GP`.
+The `--Model` option accepts `NNARX`, `GP`, or `BLL`; the default is `GP`.
 
 - `NNARX` uses the neural-network autoregressive prediction strategy.
 - `GP` adds a Gaussian-process correction based on buffered residuals.
-- `BNNExp` updates a Bayesian last layer and includes uncertainty-aware exploration behavior.
+- `BLL` updates a Bayesian last layer and includes uncertainty-aware exploration behavior.
 
 ## Requirements
 
@@ -61,7 +61,7 @@ From the repository root, run the import smoke test:
 python smoke_test.py
 ```
 
-To select a strategy, pass `--Model NNARX`, `--Model GP`, or `--Model BNNExp`. Debug mode is the default; `--Debug` may be supplied explicitly.
+To select a strategy, pass `--Model NNARX`, `--Model GP`, or `--Model BLL`. Debug mode is the default; `--Debug` may be supplied explicitly.
 
 ## Debug simulation
 
@@ -107,7 +107,7 @@ The available `smoke_test.py` is an import check. The repository does not curren
 
 ## Known limitations
 
-The application is plant-specific, uses source-controlled runtime parameters from the central configuration builder, and depends on mutable model state for GP and BNNExp. The live path is deployment-specific. Licensing, provenance, redistribution rights, and anonymization status for several artifacts remain unresolved.
+The application is plant-specific, uses source-controlled runtime parameters from the central configuration builder, and depends on mutable model state for GP and BLL. The live path is deployment-specific. Licensing, provenance, redistribution rights, and anonymization status for several artifacts remain unresolved.
 
 ## Security and configuration notes
 

@@ -14,8 +14,8 @@
   - [x] modelli caricati;
   - [x] dati disponibili;
   - [x] solver e dipendenze accessibili.
-- [ ] Aggiungere la validazione delle dimensioni di stati, ingressi e uscite.
-- [ ] Aggiungere guard check per limiti dei parametri, dimensione del problema e dati mancanti.
+- [x] Aggiungere la validazione delle dimensioni di stati, ingressi e uscite.
+- [x] Aggiungere guard check per limiti dei parametri, dimensione del problema e dati mancanti.
 - [ ] Documentare in modo univoco i casi live, debug e test.
 
 ## 3. Test e validazione

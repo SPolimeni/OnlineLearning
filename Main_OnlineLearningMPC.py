@@ -28,7 +28,7 @@ def parse_args(argv=None):
         type=str,
         default="GP",
         choices=SUPPORTED_MODELS,
-        help="Set the model type: 'NNARX', 'GP', or 'BNNExp'",
+        help="Set the model type: 'NNARX', 'GP', or 'BLL'",
     )
     parser.add_argument(
         "--Debug",

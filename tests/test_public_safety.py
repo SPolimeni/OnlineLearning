@@ -14,10 +14,10 @@ from runtime.controller_runner import ControllerRunner
 
 class PublicSafetyTest(unittest.TestCase):
     def test_cli_defaults_to_debug_and_preserves_model(self):
-        args = Main_OnlineLearningMPC.parse_args(["--Model", "BNNExp"])
+        args = Main_OnlineLearningMPC.parse_args(["--Model", "BLL"])
         self.assertTrue(args.Debug)
         self.assertFalse(args.Live)
-        self.assertEqual(args.Model, "BNNExp")
+        self.assertEqual(args.Model, "BLL")
 
     def test_explicit_live_request_is_rejected_before_building_parameters(self):
         with patch.object(Main_OnlineLearningMPC, "build_parameters") as build_parameters:

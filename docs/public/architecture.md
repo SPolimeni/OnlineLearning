@@ -14,7 +14,7 @@ The most important files are:
 - [src/config/parameters.py](../../src/config/parameters.py): builds the controller parameter dictionary (`build_parameters`)
 - [src/runtime/controller_runner.py](../../src/runtime/controller_runner.py): `ControllerRunner`, which owns the control loop, buffers, plant/FMU I/O and error logging
 - [src/class_MPC.py](../../src/class_MPC.py): `MPC`, the core optimization and prediction implementation
-- [src/model_strategies.py](../../src/model_strategies.py): per-model strategies (NNARX, GP, BNNExp)
+- [src/model_strategies.py](../../src/model_strategies.py): per-model strategies (NNARX, GP, BLL)
 - [src/project_paths.py](../../src/project_paths.py): repository-stable paths to bundled input data
 - [src/utils](../../src/utils): support code for data saving, state reading (InfluxDB) and setpoint writing (OPC UA)
 - [NNmodels](../../NNmodels): trained neural-network model files (`.mat`)
@@ -22,7 +22,7 @@ The most important files are:
 
 ## Execution Flow
 
-The execution flow begins in [Main_OnlineLearningMPC.py](../../Main_OnlineLearningMPC.py), which adds `src/` to the import path, parses `--Model {NNARX,GP,BNNExp}` (default `GP`) and the debug/live boundary, calls `build_parameters(model)`, creates a `ControllerRunner(parameters, debug=...)`, and calls `run()`. Debug is the default; an explicit `--Live` request is rejected before controller construction.
+The execution flow begins in [Main_OnlineLearningMPC.py](../../Main_OnlineLearningMPC.py), which adds `src/` to the import path, parses `--Model {NNARX,GP,BLL}` (default `GP`) and the debug/live boundary, calls `build_parameters(model)`, creates a `ControllerRunner(parameters, debug=...)`, and calls `run()`. Debug is the default; an explicit `--Live` request is rejected before controller construction.
 
 `ControllerRunner.run()` selects one of two execution paths:
 
@@ -30,6 +30,8 @@ The execution flow begins in [Main_OnlineLearningMPC.py](../../Main_OnlineLearni
 - **live integration boundary**: retained source modules show the OPC UA/InfluxDB application interface, but public live execution is rejected as illustrative/read-only
 
 Model, FMU, output, and log paths are resolved through [src/project_paths.py](../../src/project_paths.py) from the repository tree. The entry point is intended to be launched from the repository root because it adds the relative `src/` directory to the import path. CSV input data is also resolved through `project_paths.data_file`.
+
+Before runtime construction, the entry point validates configured asset and data dimensions. Each MPC step then validates the state history, input history, and predicted-output history before building CasADi variables, and validates the accepted solution dimensions before updating the warm start.
 
 ## Configuration
 
@@ -42,7 +44,7 @@ All controller parameters are produced by `build_parameters(model)` in [src/conf
 Each call to `ControllerRunner.solve_step()` performs one receding-horizon iteration:
 
 1. **Read state.** `read_status()` fills `y_dict` with supply temperature, return temperature and flow. Live mode reads InfluxDB; debug mode uses startup fixtures and then FMU outputs.
-2. **Bayesian update.** For BNNExp after `T_C0`, `MPC.bayesian_correction` updates the last-layer weights stored in `theta_history`.
+2. **Bayesian update.** For BLL after `T_C0`, `MPC.bayesian_correction` updates the last-layer weights stored in `theta_history`.
 3. **Optimize.** `MPC.mpc_controller(..., flag=1)` solves with exploration enabled. If no exploration slack is active, it re-solves with `flag=0`; the chosen flag is stored in `exploration`.
 4. **Store results.** The first control move, slacks, predictions, boiler powers, uncertainty, and step cost are stored in buffers.
 5. **Persist and apply.** `SaveAggregatedData` appends the current step to CSV files; live mode sends setpoints through OPC UA and debug mode advances the FMU.
@@ -59,7 +61,7 @@ Behavior dependent on `Param["Model"]` is delegated to a strategy object created
 
 - **NNARXStrategy:** neural autoregressive predictions with a temperature slack in the cost.
 - **GPStrategy:** a Gaussian-process correction on top of the NNARX prediction, trained online from buffered residuals.
-- **BNNExpStrategy:** a Bayesian last layer using updated `theta`, uncertainty-aware output constraints, exploration slacks, and `bayesian_correction`.
+- **BLLStrategy:** a Bayesian last layer using updated `theta`, uncertainty-aware output constraints, exploration slacks, and `bayesian_correction`.
 
 ## FMU Interactions
 
@@ -77,14 +79,14 @@ The controller loads the MAT model named in `nnarx_mat` from [NNmodels](../../NN
 - **Configuration:** [src/config](../../src/config) builds parameters and loads input time series.
 - **Runtime:** [src/runtime](../../src/runtime) allocates buffers, selects debug/live execution, handles I/O, invokes optimization and updates, and logs exceptions.
 - **Controller core:** [src/class_MPC.py](../../src/class_MPC.py) loads model data, builds variables/constraints/cost, solves with IPOPT, and rolls out the model.
-- **Model strategies:** [src/model_strategies.py](../../src/model_strategies.py) contains NNARX/GP/BNNExp-specific behavior.
+- **Model strategies:** [src/model_strategies.py](../../src/model_strategies.py) contains NNARX/GP/BLL-specific behavior.
 - **Utilities:** [src/utils](../../src/utils) contains InfluxDB reads, OPC UA writes, result persistence, and bundled input data.
 
 ## Data Flow
 
 1. Plant measurements are read from InfluxDB (live) or the FMU (debug).
 2. The runner stores state in `y_out`.
-3. BNNExp optionally updates its Bayesian last layer.
+3. BLL optionally updates its Bayesian last layer.
 4. The active model strategy predicts future behavior.
 5. The optimization routine computes feasible control moves.
 6. The first action is stored and sent to the plant or FMU.

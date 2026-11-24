@@ -31,13 +31,15 @@ The entry point is [Main_OnlineLearningMPC.py](../../Main_OnlineLearningMPC.py).
 
 | Option | Values | Meaning |
 | --- | --- | --- |
-| `--Model` | `NNARX`, `GP`, `BNNExp` | Selects the model strategy; default: `GP`. |
+| `--Model` | `NNARX`, `GP`, `BLL` | Selects the model strategy; default: `GP`. |
 | `--Debug` | flag | Explicitly selects the FMU simulation path; debug is already the default. |
 | `--Live` | flag | Rejected: live integration is illustrative/read-only and disabled for public execution. |
 
 The runtime parameter dictionary includes dimensions, timing, operating limits, the default MAT model path, and bundled electricity-price and heat-load arrays. These values are source configuration, not user-editable deployment settings exposed by a configuration file.
 
 Before the controller is constructed, the command-line entry point runs a configuration preflight. It checks the required model and FMU files, validates the loaded CSV arrays, verifies the MAT model structure, imports the required runtime dependencies, and confirms that CasADi can access IPOPT. A failure stops startup with an explicit list of the failed checks.
+
+The same startup validation checks parameter bounds, horizon divisibility, and that the heat-load dataset contains enough rows for the configured simulation horizon. Direct MPC construction repeats the parameter guards so invalid configurations cannot bypass the startup checks.
 
 ## 3. Run the smoke test
 
@@ -55,7 +57,7 @@ Debug mode is the safe default. The explicit form is:
 python Main_OnlineLearningMPC.py --Debug --Model GP
 ```
 
-The runner loads `FMUs/DHN_MC_V3_FMU_EB_60.fmu`, initializes startup buffers, solves successive MPC steps, and sends generated controls back to the FMU. Use `NNARX` or `BNNExp` in place of `GP` to exercise the other strategy implementations. Debug execution is not a live-plant test and should not be described as exact article reproduction without a fixed baseline, asset hash, environment record, and owner-approved tolerances.
+The runner loads `FMUs/DHN_MC_V3_FMU_EB_60.fmu`, initializes startup buffers, solves successive MPC steps, and sends generated controls back to the FMU. Use `NNARX` or `BLL` in place of `GP` to exercise the other strategy implementations. Debug execution is not a live-plant test and should not be described as exact article reproduction without a fixed baseline, asset hash, environment record, and owner-approved tolerances.
 
 ## 5. Understand the live integration boundary
 

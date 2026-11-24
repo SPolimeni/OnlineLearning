@@ -10,7 +10,7 @@ Functional overview:
   plant constraints, economic parameters, and model metadata.
 - At each control step it reads the current system state and reconstructs the
   last input/output history used by the predictive model.
-- The NNARX/GP/BNNExp model is used to generate a prediction over the horizon and
+- The NNARX/GP/BLL model is used to generate a prediction over the horizon and
   the optimizer solves a constrained finite-horizon problem.
 - The first control action of the computed sequence is applied to the plant or the
   debug FMU, while the complete optimized trajectory is kept as warm start for the
@@ -28,12 +28,13 @@ from scipy.io import loadmat
 # from pyfmi import load_fmu
 import time
 
-from model_strategies import NNARXStrategy, GPStrategy, BNNExpStrategy
+from config.parameters import validate_parameter_guards
+from model_strategies import NNARXStrategy, GPStrategy, BLLStrategy
 
 _STRATEGY_FACTORY = {
     "NNARX":    NNARXStrategy,  
     "GP":       GPStrategy,
-    "BNNExp":   BNNExpStrategy,
+    "BLL":      BLLStrategy,
 }
 
 class MPC:
@@ -43,7 +44,7 @@ class MPC:
     and repeatedly solves a constrained optimization problem. The first control
     action from the optimized horizon is applied to the plant or simulation model.
 
-    All behavior specific to a given Param["Model"] ('NNARX', 'GP', 'BNNExp') is
+    All behavior specific to a given Param["Model"] ('NNARX', 'GP', 'BLL') is
     delegated to a per-model strategy object (see model_strategies.py); this class
     holds only the common orchestration logic, which is the NNARX behavior itself.
     """
@@ -60,6 +61,7 @@ class MPC:
 
     def _assign_parameters(self, params: dict):
         """Copy configuration values and initialize the derived controller state."""
+        validate_parameter_guards(params)
         for name, value in params.items():
             if name == "c_el":
                 value = self.ensure2D(value)
@@ -128,6 +130,73 @@ class MPC:
     def np2torch(self, x):
         """Convert NumPy data into a PyTorch tensor in the float format used by the model code."""
         return torch.from_numpy(np.asarray(x)).float()
+
+    def validate_runtime_dimensions(self, t, xk, uk, y_rnn):
+        """Validate state, input, and predicted-output history dimensions."""
+        errors = []
+        arrays = (
+            ("state history xk", xk, (self.n_out,)),
+            ("input history uk", uk, (self.n_inp,)),
+        )
+        for name, value, first_dimension in arrays:
+            array = np.asarray(value)
+            if array.ndim != 2 or array.shape[0] != first_dimension[0]:
+                errors.append(
+                    f"{name} has shape {array.shape}; expected "
+                    f"({first_dimension[0]}, time_steps)"
+                )
+            elif t >= array.shape[1]:
+                errors.append(
+                    f"{name} has {array.shape[1]} time steps; current step is {t}"
+                )
+
+        output_history = np.asarray(y_rnn)
+        if output_history.ndim != 2 or output_history.shape[1] != self.n_out:
+            errors.append(
+                f"predicted-output history y_rnn has shape {output_history.shape}; "
+                f"expected (time_steps, {self.n_out})"
+            )
+        elif t >= output_history.shape[0]:
+            errors.append(
+                f"predicted-output history y_rnn has {output_history.shape[0]} "
+                f"time steps; current step is {t}"
+            )
+
+        for name, value in (
+            ("state history xk", xk),
+            ("input history uk", uk),
+            ("predicted-output history y_rnn", y_rnn),
+        ):
+            if not np.all(np.isfinite(np.asarray(value))):
+                errors.append(f"{name} contains non-finite values")
+
+        if errors:
+            raise ValueError("Runtime dimension validation failed:\n- " + "\n- ".join(errors))
+
+    def _validate_solution_dimensions(self, u_opt, u_pred, y_pred, y_nnarx, Pb_pred, sigma_pred):
+        """Validate the dimensions of the accepted MPC solution."""
+        expected_shapes = (
+            ("u_opt", u_opt, (self.n_inp,)),
+            ("u_pred", u_pred, (self.n_inp,)),
+            ("y_pred", y_pred, (self.n_out, self.N)),
+            ("y_nnarx", y_nnarx, (self.n_out, self.N)),
+            ("Pb_pred", Pb_pred, (2, self.N)),
+            ("sigma_pred", sigma_pred, (self.N, self.n_out)),
+        )
+        errors = []
+        for name, value, expected_shape in expected_shapes:
+            actual_shape = np.asarray(value).shape
+            if actual_shape != expected_shape and not (
+                name == "u_pred"
+                and len(actual_shape) == 2
+                and actual_shape[0] == expected_shape[0]
+                and actual_shape[1] >= self.n_uopt
+            ):
+                errors.append(
+                    f"{name} has shape {actual_shape}; expected {expected_shape}"
+                )
+        if errors:
+            raise ValueError("MPC solution dimension validation failed:\n- " + "\n- ".join(errors))
 
     def SetOptimizationVariables(self):
         """Create the CasADi optimization variables for the receding-horizon problem."""
@@ -293,6 +362,7 @@ class MPC:
         # 4) keeps only the first action and stores the warm-start state for the next step.
         # The logic is intentionally left in a single method to preserve the existing
         # runtime contract and project structure.
+        self.validate_runtime_dimensions(t, xk, uk, y_rnn)
         start_time = time.time()
         data = self.data
         Potenze = self.Potenze
@@ -450,6 +520,7 @@ class MPC:
 
         # Save the latest accepted optimization result so the next MPC call has a
         # reliable warm start and a consistent notion of the previous horizon.
+        self._validate_solution_dimensions(u_opt, u_pred, y_pred, y_nnarx, Pb_pred, sigma_pred)
         self.J_prec=J_pred
         self.Pb_prec=Pb_pred
         self.y_prec=y_pred
@@ -677,7 +748,7 @@ class MPC:
 
         This is the mechanism that adapts the model when the controller is operating
         with uncertainty-aware corrections. Delegated to the active model strategy;
-        only BNNExp implements it. The update uses the measured output history and
+        only BLL implements it. The update uses the measured output history and
         preceding control history, then returns the current last-layer parameter
         matrix for storage by the runtime.
         """

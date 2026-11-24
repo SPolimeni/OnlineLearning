@@ -1,9 +1,9 @@
 """Per-model strategy classes used by class_MPC.MPC.
 
-Each supported value of Param["Model"] ('NNARX', 'GP', 'BNNExp') maps to one
+Each supported value of Param["Model"] ('NNARX', 'GP', 'BLL') maps to one
 strategy class here. ModelStrategy defines the default hook behavior, which
 is exactly the NNARX case (the common/baseline behavior); GPStrategy and
-BNNExpStrategy override only the hooks where their behavior differs from
+BLLStrategy overrides only the hooks where their behavior differs from
 that baseline, and each owns all of its model-specific state and code in one
 place instead of it being scattered across MPC as `if self.Model == ...`
 branches.
@@ -582,7 +582,7 @@ class GPStrategy(ModelStrategy):
         return y_final
 
 
-class BNNExpStrategy(ModelStrategy):
+class BLLStrategy(ModelStrategy):
     """Bayesian last-layer model with uncertainty-aware exploration constraints.
 
     The strategy adds horizon-sized exploration slack and uncertainty variables,
