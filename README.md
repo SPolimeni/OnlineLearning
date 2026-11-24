@@ -101,7 +101,7 @@ Three reproducibility levels are currently distinguishable:
 
 1. **Source and import inspection:** read the documented architecture and inspect source, models, FMUs, and bundled inputs. This requires no runtime integration.
 2. **Smoke test:** run `python smoke_test.py` in the declared environment. This checks imports and project wiring; it does not validate optimization results or FMU trajectories.
-3. **FMU debug simulation:** run the `--Debug` command on a supported Windows environment with the required FMU and dependencies. This exercises the controller and simulation path, but exact article reproduction remains unverified because fixed fixtures, asset provenance, environment capture, and expected numerical baselines are missing.
+3. **FMU debug simulation:** run the `--Debug` command on a supported Windows environment with the required FMU and dependencies. This exercises the controller and simulation path; implementation-level fixtures, asset provenance, environment capture, and reduced strategy baselines are recorded, but exact article reproduction remains unverified.
 
 Live plant execution is not a reproducibility level. It requires private infrastructure and must be validated only in an approved isolated deployment.
 
@@ -127,16 +127,19 @@ Validate the separate reduced GP/FMU numerical baseline with:
 python tests/validate_fmu_baseline.py
 ```
 
-The repository does not currently establish tests for complete optimization
-feasibility, successful first control moves across every strategy, Bayesian
-updates, exploration, or complete FMU trajectories.
-A publication release should add owner-approved fixtures, tolerances,
-environment records, asset hashes, and representative debug baselines before
-claiming article-level reproduction.
+Validate the reduced trajectory and strategy comparison baseline with:
+
+```powershell
+python tests/validate_strategy_baseline.py
+```
+
+These are implementation-level regressions, not article-level validation.
+They do not certify live operation, arbitrary horizons, or exact article
+reproduction.
 
 ## Known limitations
 
-The application is plant-specific, uses source-controlled runtime parameters from the central configuration builder, and depends on mutable model state for GP and BLL. The live path is deployment-specific. Licensing, provenance, redistribution rights, and anonymization status for several artifacts remain unresolved.
+The application is plant-specific, uses source-controlled runtime parameters from the central configuration builder, and depends on mutable model state for GP and BLL. The live path is deployment-specific. See the [operational guide](docs/public/operations.md) for the authorized deployment procedure, output meanings, failure diagnosis, and strong plant/model assumptions. Licensing, provenance, redistribution rights, and anonymization status for several artifacts remain unresolved.
 
 ## Security and configuration notes
 

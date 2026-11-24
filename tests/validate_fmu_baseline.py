@@ -13,6 +13,7 @@ import numpy as np
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, "src")
 BASELINE_PATH = os.path.join(ROOT, "docs", "public", "fmu-baseline.json")
+ASSET_MANIFEST_PATH = os.path.join(ROOT, "docs", "public", "asset-manifest.json")
 sys.path.insert(0, SRC)
 
 from config.parameters import build_parameters, validate_parameters
@@ -33,12 +34,16 @@ def main():
     with open(BASELINE_PATH, encoding="utf-8") as handle:
         baseline = json.load(handle)
 
-    for relative_path, expected_hash in baseline["assets"].items():
+    with open(ASSET_MANIFEST_PATH, encoding="utf-8") as handle:
+        asset_manifest = json.load(handle)
+
+    for asset in asset_manifest["assets"]:
+        relative_path = asset["path"]
         actual_hash = file_sha256(os.path.join(ROOT, *relative_path.split("/")))
-        if actual_hash != expected_hash:
+        if actual_hash != asset["sha256"]:
             raise RuntimeError(
                 f"Baseline asset hash mismatch for {relative_path}: "
-                f"expected {expected_hash}, got {actual_hash}"
+                f"expected {asset['sha256']}, got {actual_hash}"
             )
 
     configuration = baseline["configuration"]

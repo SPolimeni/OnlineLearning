@@ -34,7 +34,7 @@ This matrix records the environment observed locally. The lock export and exact 
 
 ## Asset hashes
 
-The complete local hash table is maintained in [asset-provenance.md](asset-provenance.md). Required asset classes are:
+The single-source asset manifest is maintained in [asset-manifest.json](asset-manifest.json), with a human-readable rendering in [asset-provenance.md](asset-provenance.md). Required asset classes are:
 
 - FMUs under `FMUs/`;
 - MAT models under `NNmodels/`;

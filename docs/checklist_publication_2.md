@@ -38,18 +38,18 @@
 
 ## 5. Igiene del repository e asset
 
-- [ ] Completare la pulizia di script e documentazione legacy o duplicati.
-- [ ] Definire una singola fonte di verità per dati di esempio, modelli e FMU.
-- [ ] Aggiungere un manifest degli asset con ruolo, provenienza, hash e stato di redistribuzione.
-- [ ] Verificare che dati runtime, risultati sperimentali e asset di progetto siano separati chiaramente.
-- [ ] Confermare che gli artefatti generati restino esclusi dal repository pubblico.
+- [x] Completare la pulizia di script e documentazione legacy o duplicati.
+- [x] Definire una singola fonte di verità per dati di esempio, modelli e FMU.
+- [x] Aggiungere un manifest degli asset con ruolo, provenienza, hash e stato di redistribuzione.
+- [x] Verificare che dati runtime, risultati sperimentali e asset di progetto siano separati chiaramente.
+- [x] Confermare che gli artefatti generati restino esclusi dal repository pubblico.
 
 ## 6. Documentazione operativa
 
-- [ ] Aggiungere una procedura operativa per un’esecuzione live autorizzata, separata dal percorso pubblico disabilitato.
-- [ ] Documentare il significato degli output, dei file generati e dei log.
-- [ ] Documentare come riconoscere errori del solver, dati non validi e fallback.
-- [ ] Identificare esplicitamente le assunzioni forti relative all’impianto e al modello.
+- [x] Aggiungere una procedura operativa per un’esecuzione live autorizzata, separata dal percorso pubblico disabilitato.
+- [x] Documentare il significato degli output, dei file generati e dei log.
+- [x] Documentare come riconoscere errori del solver, dati non validi e fallback.
+- [x] Identificare esplicitamente le assunzioni forti relative all’impianto e al modello.
 
 ## 7. Handoff finale
 

@@ -14,3 +14,9 @@ owner-approved, anonymized examples. The exclusion does not delete local
 results or establish permission to redistribute them. Before creating the
 future public repository, perform an independent release-tree scan and obtain
 the required data-ownership and privacy decisions.
+
+The runtime assets used by the public debug path are enumerated only in
+[asset-manifest.json](public/asset-manifest.json). The manifest is the source
+of truth for each asset's role, byte count, SHA-256 hash, provenance note, and
+redistribution status; baseline fixtures refer to it rather than maintaining
+independent asset lists.

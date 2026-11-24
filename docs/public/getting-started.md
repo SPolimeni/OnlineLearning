@@ -113,6 +113,11 @@ Setting private connector environment variables does not enable live execution;
 the public entry point still rejects `--Live` before constructing connectors or
 the controller.
 
+The authorized deployment procedure, output meanings, failure diagnosis, and
+strong plant/model assumptions are documented in
+[operations.md](operations.md). That guide does not enable the public live
+path or contain credentials.
+
 ## 7. Locate inputs and outputs
 
 Bundled CSV inputs are loaded from `src/utils/data/`. The default neural model is `NNmodels/NARX_net.mat`; FMU files are under `FMUs/`. Local execution writes generated results under `Solutions/<Model>/<ddmm>/` and exceptions under `LogsFolder/`; these locations are excluded from the public repository.

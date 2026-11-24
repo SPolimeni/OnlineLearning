@@ -6,13 +6,16 @@ This folder is the external-reader documentation set for OnlineLearning, a resea
 
 - [Getting started and installation](getting-started.md): requirements, environment setup, smoke test, debug simulation, and a warning about live execution.
 - [Execution modes](execution-modes.md): authoritative definitions, commands, I/O boundaries, and claims for test, debug, and live cases.
+- [Operational guide](operations.md): authorized live-deployment procedure, output meanings, failure diagnosis, and plant/model assumptions.
 - [FMU baseline](fmu-baseline.json): versioned assets, configuration, expected first controlled GP interval, and numerical tolerances.
 - [Strategy baseline](strategy-baseline.json): fixed reduced trajectories, costs, solver statuses, first controls, and comparison tolerances for NNARX, GP, and BLL.
+- [Asset manifest](asset-manifest.json): single source of truth for runtime assets, roles, hashes, provenance, and redistribution status.
 - [Environment lock](../../environment-lock.txt): exact package-version audit export from the verified local environment.
 - [Architecture](architecture.md): command-line entry point, configuration flow, runtime loop, MPC core, model strategies, FMU debug path, live interfaces, and data flow.
 - [Environment verification](environment-verification.md): the locally verified Windows/Conda/Python environment and checks that were performed.
 - [Reproducibility matrix](reproducibility-matrix.md): what can currently be inspected, smoke-tested, or exercised through debug simulation, and what is still required for exact article-result reproduction.
-- [Asset provenance](asset-provenance.md): measured hashes for local FMUs, MAT models, and CSV inputs, with their unresolved redistribution status.
+- [Asset manifest](asset-manifest.json): single source of truth for runtime asset roles, hashes, provenance, and redistribution status.
+- [Asset provenance](asset-provenance.md): human-readable rendering of the asset manifest.
 
 ## Scope and limitations
 

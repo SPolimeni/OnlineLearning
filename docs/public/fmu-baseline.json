@@ -12,12 +12,7 @@
     "controlled_step": 4,
     "fmu_output_index": 5
   },
-  "assets": {
-    "FMUs/DHN_sim.fmu": "d3b4fbb695af633c6f8717e77cf62641f15e9f31a5b2214c4d1992e7858dbbc9",
-    "NNmodels/NARX_net.mat": "a270d186c0d379db0e5f1d4b2d6fd187cf641aaafc6128fc04d5f00209379228",
-    "src/utils/data/DayAhead_ZonalPrices.csv": "e401c5e3e6641a894609a3d363df99b1d382b01e208a0a072b215fedba3ec712",
-    "src/utils/data/DHN_ground_truth.csv": "8434044ee106888b9260636e374b9cfd1e209c3d4f180e5187d7e3d7cf342e89"
-  },
+  "asset_manifest": "docs/public/asset-manifest.json",
   "expected": {
     "solver_status": 1,
     "first_optimized_control": [
