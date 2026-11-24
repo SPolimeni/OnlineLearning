@@ -1,0 +1,95 @@
+key,value
+Nb,3
+n_out,3
+n_x,10
+n_inp,6
+tot_hours,5
+seconds_per_hour,3600
+Ts,300
+N,12
+specific_heat_capacity,4186
+q_eb,0.8333333333333333
+temperature_slack_max,20
+temperature_delta_max,5
+Tr_max,66
+Tr_min,45
+Ts_max,75
+Ts_max_eb,72
+Ts_min_supply,68
+Ts_min_eb,65
+Ts_max_gb,75
+Ts_min_gb,65
+m_max,7
+m_min,2
+Pb_max,147000.0
+Pb_min,60000.0
+Pb_max_eb,38000.0
+Pb_min_eb,22000.0
+beta0_1,35
+beta0_2,30
+beta0_3,13
+epsilon0,0.4
+L_prev0,100
+sigma_epsilon0_2,0.001
+gamma,0.2
+T_ref,70
+c_gas,0.034
+COP,0.8
+eff_EB,0.8
+gamma_exp0,5
+gamma_slack0,5000.0
+alpha_slack0,5000.0
+P_Shift,5000
+P_Shift_mpc1,0
+P_Shift_mpc2,0
+P_Shift_mpc3,0
+P_Shift_mpc4,0
+Model,GP
+T_C0,4
+n_slack,1
+initial_state,[70.26909129 60.78624507  2.5       ]
+initial_control,[-32000.  -32000.  -32000.  -32000.      70.5     70. ]
+initial_sigma,0.05
+debug_initial_state,"[[71.06958   70.96986   71.104965  71.12856  ]
+ [60.12344   60.224037  60.187595  60.183292 ]
+ [ 2.7702346  2.7731984  2.7713318  2.7692516]]"
+debug_fmu,DHN_sim.fmu
+control_power_scale,-0.001
+energy_power_scale,0.001
+exploration_slack_tolerance,0.001
+plant_power_minimum,10
+plant_power_fallback,32
+outlet_temperature_minimum,45
+outlet_temperature_fallback,72
+solver_max_iterations,10000
+solver_print_level,3
+solver_relaxed_print_level,0
+solver_complementarity_tolerance,1e-05
+solver_relaxed_complementarity_tolerance,0.0001
+solver_acceptable_tolerance,0.0001
+solver_acceptable_iterations,10
+solver_mu_strategy,adaptive
+solver_relaxed_objective_scale,0.01
+fmu_relative_tolerance,0.0001
+fmu_absolute_tolerance,0.0001
+fmu_initial_steps,5
+opcua_write_attempts,5
+opcua_retry_delay_seconds,1
+minimum_slack,1e-08
+exploration_min_slack,1e-06
+exploration_max_slack,10.0
+late_slack_weight,0.001
+bnn_slack_max,[50 50 50]
+bnn_initial_slack_max,[5 1 3]
+nnarx_mat,C:\Polimeni\00_GitRepos\OnlineLearning\NNmodels\NARX_net.mat
+c_el,"[1.0620e+02 9.7100e+01 9.5590e+01 9.3700e+01 9.4910e+01 9.5580e+01
+ 9.2000e+01 9.0970e+01 5.0000e+01 1.3330e+01 4.0000e+00 4.0000e+00
+ 1.0000e+00 1.0000e-02 3.0000e-02 1.0000e-02 1.0000e+00 1.1000e+01
+ 8.7080e+01 1.1853e+02 1.4112e+02 1.1853e+02 9.9880e+01 9.0000e+01]"
+Potenza,"[[-39788.45471091 -34563.21455944 -38308.71608275 -33255.26281711]
+ [-39797.17026923 -34517.96187743 -38396.94819894 -33247.18338741]
+ [-39838.03501502 -34453.45881028 -38285.61451253 -33313.50233511]
+ ...
+ [-34538.9508802  -34484.37661781 -32457.57093018 -31694.67183253]
+ [-34602.75053976 -34500.26519813 -32417.1312411  -31667.51450373]
+ [-34564.31848886 -34461.40463468 -32379.73343484 -31699.83011877]]"
