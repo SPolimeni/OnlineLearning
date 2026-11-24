@@ -125,14 +125,11 @@ The latter compiles Python sources, runs the smoke test, and runs the unit tests
 ## Known limitations
 
 - Windows-native FMU support is required for the documented simulation.
-- GP and BNNExp (`BLL`) retain mutable state, which affects trajectories.
-- Exact units, asset provenance, article configuration, and approved numerical tolerances still require owner confirmation.
-- The experimental result archive is not documented as a verified benchmark.
 - Live execution is disabled.
 
 ## Security and configuration notes
 
-Do not publish credentials, private endpoints, certificates, node identifiers, or non-public plant data. Runtime parameters are defined in source rather than a user configuration file. Review generated logs and results before sharing them.
+Credentials, private endpoints, certificates, node identifiers, or non-public plant data are not published. Runtime parameters are defined in source rather than a user configuration file. 
 
 ## Citation
 
@@ -142,10 +139,3 @@ No `CITATION.cff`, approved authorship, or DOI is present. Add owner-approved ci
 
 No repository license is present. A software license and asset-specific redistribution decisions are required before public release.
 
-## Contributing
-
-No contribution guide is currently included. Changes affecting timing, equations, constraints, units, model ordering, solver behavior, or scientific assets require scientific-owner review and new validation evidence.
-
-## Contact
-
-No public maintainer contact is specified. Add an owner-approved contact before release.
