@@ -1,141 +1,86 @@
 # Getting Started
 
-This guide describes installation and the two runtime modes currently implemented. Run commands from the repository root because the entry point adds the relative `src/` directory to the import path. Model, FMU, result, and log paths are resolved from the repository tree by [src/project_paths.py](../../src/project_paths.py).
+Run all commands from the repository root in Windows PowerShell.
 
-## 1. Install the environment
-
-Use Windows PowerShell and Conda. The declared environment is pinned to Python 3.10 and includes CasADi/IPOPT support, numerical libraries, PyTorch/GPyTorch, APScheduler, pyFMI, InfluxDB client support, and OPC UA support.
-
-`openpyxl` is optional. Install it only when using the private `src/utils/InfluxDB/DBVarListToJson.py` utility to convert a private Excel metadata workbook into a JSON registry. It is not required for the public controller, smoke test, or debug workflow.
+## 1. Create the Conda environment
 
 ```powershell
 conda env create --prefix .\env --file environment.yml
 conda activate .\env
 ```
 
-Keep this Conda environment active for every import, smoke-test, and controller command. In particular, the FMU path requires the Windows-native pyFMI and Assimulo libraries supplied by this environment. An equivalent non-interactive form is `conda run --prefix .\env python <command>`.
-
-The verified local workflow and results are recorded in [environment-verification.md](environment-verification.md). The exact package-version audit export is [environment-lock.txt](../../environment-lock.txt). The distinction between source/import reproducibility, implementation-level debug simulation, and exact article-result reproduction is recorded in [reproducibility-matrix.md](reproducibility-matrix.md).
-The authoritative distinction between test, debug, and live execution is
-defined in [execution-modes.md](execution-modes.md).
-
-Update an existing environment with:
+For an existing environment:
 
 ```powershell
 conda env update --prefix .\env --file environment.yml --prune
+conda activate .\env
 ```
 
-FMU execution requires the native pyFMI/Assimulo stack and is Windows-dependent in the current implementation. In VS Code, select `env\python.exe` as the interpreter. The local `env/` directory does not establish public redistribution rights or a reproducible environment by itself.
+The FMU path depends on the Windows-native pyFMI/Assimulo stack. The repository-local `env/` directory is a local artifact and is not a substitute for installation from [environment.yml](../../environment.yml). See the preserved [environment audit export](environment-lock.txt) and [environment verification record](environment-verification.md).
 
 ## 2. Inspect the command line
 
-The entry point is [Main_OnlineLearningMPC.py](../../Main_OnlineLearningMPC.py). It builds parameters through [src/config/parameters.py](../../src/config/parameters.py) and accepts:
+[Main_OnlineLearningMPC.py](../../Main_OnlineLearningMPC.py) accepts:
 
 | Option | Values | Meaning |
 | --- | --- | --- |
-| `--Model` | `NNARX`, `GP`, `BLL` | Selects the model strategy; default: `GP`. |
-| `--Debug` | flag | Explicitly selects the FMU simulation path; debug is already the default. |
-| `--Live` | flag | Rejected: live integration is illustrative/read-only and disabled for public execution. |
+| `--Model` | `NNARX`, `GP`, `BLL` | Select the strategy; default: `GP`. |
+| `--Debug` | flag | Select FMU simulation explicitly; debug is already the default. |
+| `--Live` | flag | Rejected before runtime construction; public live execution is disabled. |
 
-The runtime parameter dictionary includes dimensions, timing, operating limits, the default MAT model path, and bundled electricity-price and heat-load arrays. These values are source configuration, not user-editable deployment settings exposed by a configuration file.
-
-Before the controller is constructed, the command-line entry point runs a configuration preflight. It checks the required model and FMU files, validates the loaded CSV arrays, verifies the MAT model structure, imports the required runtime dependencies, and confirms that CasADi can access IPOPT. A failure stops startup with an explicit list of the failed checks.
-
-The same startup validation checks parameter bounds, horizon divisibility, and that the heat-load dataset contains enough rows for the configured simulation horizon. Direct MPC construction repeats the parameter guards so invalid configurations cannot bypass the startup checks.
+`BLL` is the implementation name for the Bayesian neural network exploration (BNNExp) strategy.
 
 ## 3. Run the smoke test
 
-This is an import and wiring check. It does not start the controller, load the FMU, contact InfluxDB or OPC UA, or establish numerical reproducibility.
+**Smoke test:**
 
 ```powershell
 python smoke_test.py
 ```
 
-## 4. Run the unit tests
+This imports principal modules and validates the representative GP configuration, bundled files, MAT metadata, required dependencies, and IPOPT availability. It does not run the controller loop.
 
-The unit-test suite is separate from both the smoke test and debug simulation:
+## 4. Run tests
+
+**Test:**
 
 ```powershell
 python -m unittest discover -s tests -p "test_*.py"
 ```
 
-These tests validate only the assertions currently encoded under `tests/`.
-They do not execute the FMU controller trajectory or contact live services.
-
-Run compilation, the extended smoke test, and all unit tests with one command:
+**Publication validation:**
 
 ```powershell
 python tests/validate_publication.py
 ```
 
+The publication command compiles Python files, runs the smoke test, and runs unit tests. It does not run an FMU trajectory.
+
+The two `validate_*_baseline.py` scripts under `tests/` require baseline and asset-manifest JSON files that are not present. Do not use them as current validation commands.
+
 ## 5. Run a debug simulation
 
-Debug mode is the safe default. The explicit form is:
+**Debug simulation:**
 
 ```powershell
 python Main_OnlineLearningMPC.py --Debug --Model GP
 ```
 
-The runner loads `FMUs/DHN_sim.fmu`, initializes startup buffers, solves successive MPC steps, and sends generated controls back to the FMU. Use `NNARX` or `BLL` in place of `GP` to exercise the other strategy implementations. Debug execution is not a live-plant test and should not be described as exact article reproduction without a fixed baseline, asset hash, environment record, and owner-approved tolerances.
+Use `NNARX` or `BLL` in place of `GP` for another strategy. The runner loads `FMUs/DHN_sim.fmu`, `NNmodels/NARX_net.mat`, and the two CSV files under `src/utils/data/`. It writes generated outputs under `Solutions/<Model>/<ddmm>/` and exceptions under `LogsFolder/`.
 
-Validate the reduced GP debug baseline separately:
+A completed run exercises the implementation and FMU integration. It does not establish agreement with an article, physical validity, or numerical repeatability on another environment.
 
-```powershell
-python tests/validate_fmu_baseline.py
-```
+## 6. Reproducibility boundary
 
-This command checks asset hashes and one controlled FMU interval against
-[fmu-baseline.json](fmu-baseline.json). It is an implementation-level
-regression, not an article-result baseline.
+The current tree supports source inspection, smoke testing, unit testing, and Windows FMU debug simulation. Exact article reproduction is not established because article-specific configuration, provenance, hashes, baseline files, and approved tolerances are missing.
 
-Validate the reduced baseline for all strategies:
-
-```powershell
-python tests/validate_strategy_baseline.py
-```
-
-This command checks the recorded environment metadata and asset hashes, then
-compares complete measured/predicted trajectories, costs, solver statuses, and
-first controls for `NNARX`, `GP`, and `BLL` against
-[strategy-baseline.json](strategy-baseline.json).
-
-## 6. Understand the live integration boundary
-
-The retained live boundary can be inspected but is disabled for public execution. An explicit request is rejected:
-
-```powershell
-python Main_OnlineLearningMPC.py --Live --Model GP
-```
-
-The command raises an error explaining that live integration is illustrative and read-only and is not enabled for public execution. InfluxDB and OPC UA modules remain in the source to document the real-plant application boundary, but public commands do not connect to them.
-
-Setting private connector environment variables does not enable live execution;
-the public entry point still rejects `--Live` before constructing connectors or
-the controller.
-
-The authorized deployment procedure, output meanings, failure diagnosis, and
-strong plant/model assumptions are documented in
-[operations.md](operations.md). That guide does not enable the public live
-path or contain credentials.
-
-## 7. Locate inputs and outputs
-
-Bundled CSV inputs are loaded from `src/utils/data/`. The default neural model is `NNmodels/NARX_net.mat`; FMU files are under `FMUs/`. Local execution writes generated results under `Solutions/<Model>/<ddmm>/` and exceptions under `LogsFolder/`; these locations are excluded from the public repository.
-
-## 8. Reproducibility levels
-
-1. **Inspection:** verify source structure, parameters, bundled input paths, model assets, and architecture without executing plant integrations.
-2. **Smoke test:** run `python smoke_test.py` in the declared Conda environment. This verifies imports only.
-3. **FMU debug simulation:** run the Windows debug command with the required FMU and dependencies. The GP interval and reduced three-strategy baselines can be checked with the validation commands above; exact published-result reproduction is not currently verified.
-
-Live execution is a deployment activity, not a reproducibility level. The repository provides implementation-level fixtures, expected trajectories, complete local asset hashes, and an environment audit export; exact article reproduction and publication licensing remain separate release gates.
+The public entry point does not support plant-connected operation. An explicit `--Live` request raises an error before connector construction.
 
 ## Troubleshooting
 
-For import failures, confirm that the intended Conda environment is active and update it from [environment.yml](../../environment.yml). For FMU failures, confirm the FMU exists and the Windows pyFMI dependencies are available. For missing outputs, check write permissions and inspect `LogsFolder/Exceptions.log`.
+- For import failures, confirm that `.\env` is active and update it from `environment.yml`.
+- For preflight failures, verify `NNmodels/NARX_net.mat`, `FMUs/DHN_sim.fmu`, and both CSV inputs.
+- For FMU failures, verify the Windows pyFMI/Assimulo installation.
+- For missing outputs, check write permissions and `LogsFolder/Exceptions.log`.
 
-Do not troubleshoot live failures by publishing credentials, internal endpoints, node identifiers, or plant data. Live connector validation belongs in an approved isolated deployment.
-
-## Further documentation
-
-See the repository [README](../../README.md) for publication-readiness limitations and [architecture.md](architecture.md) for the control loop, MPC core, strategy behavior, FMU path, live path, and data flow.
+See [execution modes](execution-modes.md) for claim boundaries and [architecture](architecture.md) for runtime flow.

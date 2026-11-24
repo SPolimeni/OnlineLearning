@@ -4,7 +4,7 @@ venv/
 env/
 
 # Python runtime caches
-__pycache__/
+**/__pycache__/
 *.py[cod]
 *.pyo
 *.pyd
@@ -16,7 +16,7 @@ htmlcov/
 
 # Generated runtime outputs
 LogsFolder/
-Solutions/
+Solutions_experimental/
 archive/
 *.log
 
@@ -24,6 +24,3 @@ archive/
 .ipynb_checkpoints/
 .DS_Store
 .github
-
-# cache
-src/**/__pycache__/

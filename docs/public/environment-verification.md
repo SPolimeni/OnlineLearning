@@ -12,7 +12,7 @@ conda activate .\env
 ```
 
 The exact package-version audit export captured from the verified environment is
-[environment-lock.txt](../../environment-lock.txt). It is used to compare an
+[environment-lock.txt](environment-lock.txt). It is used to compare an
 environment created from `environment.yml`; the supported installation
 mechanism remains Conda because pyFMI and Assimulo require native binaries.
 
@@ -43,18 +43,18 @@ conda run --prefix .\env python <command>
 
 This record verifies environment setup and imports only. It does not validate FMU trajectories, numerical article reproduction, or live plant integrations.
 
-## Validation update: 2026-11-24
+## Current-tree qualification: 2026-11-24
 
-The publication validation was rerun in the repository-local environment:
+This record describes checks performed in the local environment; it is not a
+fresh validation of every file in the current tree.
 
-- `python tests/validate_publication.py`: passed Python compilation, the extended
-  smoke test, and all 14 unit tests.
-- `python tests/validate_fmu_baseline.py`: passed the versioned asset hashes and the
-  reduced GP baseline for solver status, first optimized control, one controlled
-  FMU interval, and cost.
-- `python tests/validate_strategy_baseline.py`: passed the versioned asset hashes,
-  recorded package versions, and reduced NNARX, GP, and BLL trajectory baselines.
+`tests/validate_fmu_baseline.py` and `tests/validate_strategy_baseline.py` still
+exist, but their required baseline and asset-manifest JSON files have been
+removed. They are therefore not current runnable validation commands, and
+earlier baseline results must not be presented as validation of this cleaned
+repository tree.
 
-The FMU baseline is an implementation-level regression only. It does not
-validate a complete trajectory, other model strategies, exact article results,
-or a live plant integration.
+Rerun `python tests/validate_publication.py` after installation to validate
+compilation, smoke checks, and the unit tests in the active checkout. That
+command does not execute the FMU trajectory or establish exact article
+reproduction.

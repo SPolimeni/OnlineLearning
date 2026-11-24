@@ -1,33 +1,19 @@
 # Public Documentation
 
-This folder is the external-reader documentation set for OnlineLearning, a research-oriented model-predictive control (MPC) application for a thermal or district-heating plant.
+This directory documents the public offline workflow for OnlineLearning MPC.
 
 ## Documents
 
-- [Getting started and installation](getting-started.md): requirements, environment setup, smoke test, debug simulation, and a warning about live execution.
-- [Execution modes](execution-modes.md): authoritative definitions, commands, I/O boundaries, and claims for test, debug, and live cases.
-- [Operational guide](operations.md): authorized live-deployment procedure, output meanings, failure diagnosis, and plant/model assumptions.
-- [FMU baseline](fmu-baseline.json): versioned assets, configuration, expected first controlled GP interval, and numerical tolerances.
-- [Strategy baseline](strategy-baseline.json): fixed reduced trajectories, costs, solver statuses, first controls, and comparison tolerances for NNARX, GP, and BLL.
-- [Asset manifest](asset-manifest.json): single source of truth for runtime assets, roles, hashes, provenance, and redistribution status.
-- [Environment lock](../../environment-lock.txt): exact package-version audit export from the verified local environment.
-- [Architecture](architecture.md): command-line entry point, configuration flow, runtime loop, MPC core, model strategies, FMU debug path, live interfaces, and data flow.
-- [Environment verification](environment-verification.md): the locally verified Windows/Conda/Python environment and checks that were performed.
-- [Reproducibility matrix](reproducibility-matrix.md): what can currently be inspected, smoke-tested, or exercised through debug simulation, and what is still required for exact article-result reproduction.
-- [Asset manifest](asset-manifest.json): single source of truth for runtime asset roles, hashes, provenance, and redistribution status.
-- [Asset provenance](asset-provenance.md): human-readable rendering of the asset manifest.
+- [Getting started](getting-started.md): installation, smoke tests, unit tests, and debug simulation.
+- [Execution modes](execution-modes.md): supported commands and validation boundaries.
+- [Architecture](architecture.md): configuration, control loop, MPC core, strategies, FMU path, and data flow.
+- [Environment verification](environment-verification.md): recorded local environment checks and their limits.
+- [Environment audit export](environment-lock.txt): preserved package listing from the audited environment.
 
-## Scope and limitations
+## Current scope
 
-The documents preserve the repository's current distinction between inspection, import smoke testing, offline FMU debug simulation, and live plant execution. Live execution requires private InfluxDB and OPC UA deployment details and is not a public installation or validation procedure.
+The repository supports inspection and an offline FMU debug path. Public live execution is disabled. The current documentation set does not include the previously referenced asset manifest, provenance page, reproducibility matrix, or numerical baseline JSON files.
 
-The local model, FMU, and data files are not automatically cleared for redistribution. Their hashes identify local bytes only; they do not establish ownership, licensing, provenance, anonymization, or publication permission. The strategy baseline is an implementation-level regression and does not claim exact reproduction of published results.
+The bundled model, FMU, CSV inputs, and experimental results have not been documented as cleared for redistribution. Exact article reproduction also lacks an article configuration, verified baseline, and owner-approved tolerances.
 
-For project context, see the repository [README](../../README.md). Source links in the documents below point to repository paths and are provided for inspection; they do not imply that the referenced assets or services are publicly distributable or available.
-
-## Owner metadata still required
-
-- Repository license and asset-specific redistribution decisions.
-- Citation metadata, authors, DOI, and public maintainer contact.
-- Training-data provenance and publication approval for model and input files.
-- Article configuration, initial conditions, solver records, expected outputs, and approved tolerances for exact-result reproduction.
+See the repository [README](../../README.md) for license, citation, contribution, and contact gaps.

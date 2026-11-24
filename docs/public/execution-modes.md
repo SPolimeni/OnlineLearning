@@ -1,48 +1,28 @@
 # Execution Modes
 
-This document is the source of truth for the terms **test**, **debug**, and
-**live** in this repository. They identify different execution paths and must
-not be used interchangeably.
+The current public repository supports inspection, tests, and offline FMU debug simulation. It does not support live plant execution.
 
-| Case | Purpose | Command | External I/O | Current public status |
-| --- | --- | --- | --- | --- |
-| Test | Validate imports, configuration guards, data parsing, metadata, path handling, strategy selection, solver fallback, and public live-mode safety. | `python tests/validate_publication.py` | No plant connection, setpoint write, or FMU trajectory. | Available; compilation, smoke validation, and 14 unit tests pass. |
-| Smoke test | Check principal imports, load and validate the GP configuration, and resolve the example FMU path. | `python smoke_test.py` | No plant connection, setpoint write, FMU load, or controller loop. | Available; this is narrower than the unit-test suite. |
-| Debug | Run the controller loop against the bundled FMU and feed computed controls back to that simulation. | `python Main_OnlineLearningMPC.py --Debug --Model GP` | Local FMU, bundled model/data inputs, and local result/log files only. It does not intentionally use InfluxDB or OPC UA. | Available on the supported Windows/Conda stack; the reduced GP path has a numerical regression baseline. |
-| Live | Read plant state and write setpoints through deployment-specific InfluxDB/OPC UA integrations. | `python Main_OnlineLearningMPC.py --Live --Model GP` | Would require private services, mappings, credentials, and deployment approval. | Disabled. The command raises `RuntimeError` before parameters, connectors, or the controller are constructed. |
+| Case | Command | What it does | What it does not prove |
+| --- | --- | --- | --- |
+| Inspection | None | Reviews source, parameters, and bundled assets. | Installability or numerical behavior. |
+| Smoke test | `python smoke_test.py` | Imports principal modules and validates the GP configuration, required assets, and IPOPT availability. | An FMU trajectory or article result. |
+| Test | `python -m unittest discover -s tests -p "test_*.py"` | Runs the assertions currently encoded in the unit tests. | General controller correctness or physical validity. |
+| Publication validation | `python tests/validate_publication.py` | Compiles Python files, runs the smoke test, and runs unit tests. | A complete debug trajectory or article reproduction. |
+| Debug simulation | `python Main_OnlineLearningMPC.py --Debug --Model GP` | Runs the controller against `FMUs/DHN_sim.fmu` and writes local outputs. | Live operation or exact article reproduction. |
 
 ## Selection rules
 
-- Omitting both mode flags selects **debug**. `--Debug` is the explicit,
-  equivalent spelling.
-- `--Model NNARX`, `--Model GP`, and `--Model BLL` select a model strategy;
-  they do not select an execution mode.
-- Do not combine `--Debug` and `--Live`. A live request takes precedence and
-  is rejected.
-- Environment variables described in
-  [live-deployment-configuration.md](../live-deployment-configuration.md) do
-  not enable live execution. They only describe the retained private connector
-  boundary.
+- Debug simulation is the default; `--Debug` is optional.
+- `--Model NNARX`, `--Model GP`, and `--Model BLL` select strategies.
+- The Bayesian neural network exploration (BNNExp) strategy is named `BLL` by the CLI and source.
+- Run commands from the repository root.
 
-## What each case proves
+## Disabled live request
 
-Passing the smoke test proves only that the listed modules import. Passing the
-unit tests proves the assertions currently encoded under `tests/`; it does not
-prove optimization quality or a complete FMU trajectory. The automated
-publication validation compiles the source, runs the extended smoke test, and
-runs 14 unit tests, including a forced two-attempt solver failure that verifies
-reuse of the last feasible plan.
+`--Live` is not an execution mode available to public users. The entry point rejects it before parameter, controller, InfluxDB, or OPC UA construction. No operational procedure is included.
 
-A completed debug run exercises the offline controller and FMU integration.
-It is not a live-plant test and is not evidence of exact article-result
-reproduction without fixed inputs, asset hashes, expected outputs, and approved
-tolerances. The separate command `python tests/validate_fmu_baseline.py` validates one
-controlled GP interval against [fmu-baseline.json](fmu-baseline.json), including
-asset hashes, solver status, first control, FMU output, cost, and tolerances.
-The command `python tests/validate_strategy_baseline.py` validates the reduced
-measured/predicted trajectories, costs, solver statuses, and first controls for
-all three strategies against [strategy-baseline.json](strategy-baseline.json).
+## Removed numerical fixtures
 
-Live execution is an operational deployment activity, not a test or a
-reproducibility level. The public repository intentionally provides no command
-that connects to or controls a plant.
+`tests/validate_fmu_baseline.py` and `tests/validate_strategy_baseline.py` reference `fmu-baseline.json`, `strategy-baseline.json`, and `asset-manifest.json`. Those JSON files are not present in the current tree, so the two scripts are not runnable as documented validation commands. They are also not invoked by `tests/validate_publication.py`.
+
+Until fixed fixtures, hashes, environment metadata, and owner-approved tolerances are supplied, describe debug runs as implementation exercises rather than numerical regressions or article reproductions.
