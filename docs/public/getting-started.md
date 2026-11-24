@@ -16,7 +16,7 @@ conda env update --prefix .\env --file environment.yml --prune
 conda activate .\env
 ```
 
-The FMU path depends on the Windows-native pyFMI/Assimulo stack. The repository-local `env/` directory is a local artifact and is not a substitute for installation from [environment.yml](../../environment.yml). See the preserved [environment audit export](environment-lock.txt) and [environment verification record](environment-verification.md).
+The FMU path depends on the Windows-native pyFMI/Assimulo stack. The repository-local `env/` directory is a local artifact and is not a substitute for installation from [environment.yml](../../environment.yml). See the preserved [environment audit export](environment-lock.txt).
 
 ## 2. Inspect the command line
 
@@ -24,7 +24,7 @@ The FMU path depends on the Windows-native pyFMI/Assimulo stack. The repository-
 
 | Option | Values | Meaning |
 | --- | --- | --- |
-| `--Model` | `NNARX`, `GP`, `BLL` | Select the strategy; default: `GP`. |
+| `--Model` | `NNARX`, `GP`, `BLL` | Select the strategy; default: `NNARX`. |
 | `--Debug` | flag | Select FMU simulation explicitly; debug is already the default. |
 | `--Live` | flag | Rejected before runtime construction; public live execution is disabled. |
 
@@ -63,10 +63,10 @@ The two `validate_*_baseline.py` scripts under `tests/` require baseline and ass
 **Debug simulation:**
 
 ```powershell
-python Main_OnlineLearningMPC.py --Debug --Model GP
+python Main_OnlineLearningMPC.py --Debug --Model NNARX
 ```
 
-Use `NNARX` or `BLL` in place of `GP` for another strategy. The runner loads `FMUs/DHN_sim.fmu`, `NNmodels/NARX_net.mat`, and the two CSV files under `src/utils/data/`. It writes generated outputs under `Solutions/<Model>/<ddmm>/` and exceptions under `LogsFolder/`.
+Use `GP` or `BLL` in place of `NNARX` for another strategy. The runner loads `FMUs/DHN_sim.fmu`, `NNmodels/NARX_net.mat`, and the two CSV files under `src/utils/data/`. It writes generated outputs under `Solutions/<Model>/<ddmm>/` and exceptions under `LogsFolder/`.
 
 A completed run exercises the implementation and FMU integration. It does not establish agreement with an article, physical validity, or numerical repeatability on another environment.
 

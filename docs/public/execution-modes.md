@@ -8,11 +8,11 @@ The current public repository supports inspection, tests, and offline FMU debug 
 | Smoke test | `python smoke_test.py` | Imports principal modules and validates the GP configuration, required assets, and IPOPT availability. | An FMU trajectory or article result. |
 | Test | `python -m unittest discover -s tests -p "test_*.py"` | Runs the assertions currently encoded in the unit tests. | General controller correctness or physical validity. |
 | Publication validation | `python tests/validate_publication.py` | Compiles Python files, runs the smoke test, and runs unit tests. | A complete debug trajectory or article reproduction. |
-| Debug simulation | `python Main_OnlineLearningMPC.py --Debug --Model GP` | Runs the controller against `FMUs/DHN_sim.fmu` and writes local outputs. | Live operation or exact article reproduction. |
+| Debug simulation | `python Main_OnlineLearningMPC.py --Debug --Model NNARX` | Runs the controller against `FMUs/DHN_sim.fmu` and writes local outputs. | Live operation or exact article reproduction. |
 
 ## Selection rules
 
-- Debug simulation is the default; `--Debug` is optional.
+- Debug simulation and `NNARX` are the defaults; `--Debug` and `--Model NNARX` are optional.
 - `--Model NNARX`, `--Model GP`, and `--Model BLL` select strategies.
 - The Bayesian neural network exploration (BNNExp) strategy is named `BLL` by the CLI and source.
 - Run commands from the repository root.

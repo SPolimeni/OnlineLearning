@@ -7,12 +7,11 @@ This directory documents the public offline workflow for OnlineLearning MPC.
 - [Getting started](getting-started.md): installation, smoke tests, unit tests, and debug simulation.
 - [Execution modes](execution-modes.md): supported commands and validation boundaries.
 - [Architecture](architecture.md): configuration, control loop, MPC core, strategies, FMU path, and data flow.
-- [Environment verification](environment-verification.md): recorded local environment checks and their limits.
 - [Environment audit export](environment-lock.txt): preserved package listing from the audited environment.
 
 ## Current scope
 
-The repository supports inspection and an offline FMU debug path. Public live execution is disabled. The current documentation set does not include the previously referenced asset manifest, provenance page, reproducibility matrix, or numerical baseline JSON files.
+The repository supports inspection, validation commands, and an offline FMU debug path. `NNARX` is the default model strategy. Public live execution is disabled. 
 
 The bundled model, FMU, CSV inputs, and experimental results have not been documented as cleared for redistribution. Exact article reproduction also lacks an article configuration, verified baseline, and owner-approved tolerances.
 

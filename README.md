@@ -28,7 +28,7 @@ See the [detailed architecture](docs/public/architecture.md).
 
 ## Supported model strategies
 
-`--Model` accepts `NNARX`, `GP`, or `BLL`; the default is `GP`.
+`--Model` accepts `NNARX`, `GP`, or `BLL`; the default is `NNARX`.
 
 - **NNARX** uses neural-network autoregressive predictions.
 - **GP** applies an online Gaussian-process residual correction to NNARX.
@@ -70,10 +70,10 @@ This validates imports, the representative GP configuration, required assets, an
 **Debug simulation:**
 
 ```powershell
-python Main_OnlineLearningMPC.py --Debug --Model GP
+python Main_OnlineLearningMPC.py --Debug --Model NNARX
 ```
 
-Debug is the default, so omitting `--Debug` is equivalent. Replace `GP` with `NNARX` or `BLL` to select another strategy. The runner loads `FMUs/DHN_sim.fmu`, uses the bundled model and CSV inputs, and writes local results.
+Debug and `NNARX` are the defaults, so omitting `--Debug` and `--Model NNARX` is equivalent. Replace `NNARX` with `GP` or `BLL` to select another strategy. The runner loads `FMUs/DHN_sim.fmu`, uses the bundled model and CSV inputs, and writes local results.
 
 ## Live plant execution
 

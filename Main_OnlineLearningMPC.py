@@ -26,7 +26,7 @@ def parse_args(argv=None):
     parser.add_argument(
         "--Model",
         type=str,
-        default="GP",
+        default="NNARX",
         choices=SUPPORTED_MODELS,
         help="Set the model type: 'NNARX', 'GP', or 'BLL'",
     )
