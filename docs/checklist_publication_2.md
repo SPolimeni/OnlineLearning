@@ -32,9 +32,9 @@
 
 ## 4. Ambiente e riproducibilità
 
-- [ ] Rendere completamente riproducibile l’ambiente: fissare le versioni ancora non esatte e aggiungere un lockfile o un export verificabile.
-- [ ] Registrare configurazione, condizioni iniziali, versioni, hash degli asset, sequenza degli stati del solver e tolleranze approvate.
-- [ ] Definire una baseline numerica per traiettorie, costi, primi comandi e confronti tra strategie.
+- [x] Rendere completamente riproducibile l’ambiente: fissare le versioni ancora non esatte e aggiungere un lockfile o un export verificabile.
+- [x] Registrare configurazione, condizioni iniziali, versioni, hash degli asset, sequenza degli stati del solver e tolleranze approvate.
+- [x] Definire una baseline numerica per traiettorie, costi, primi comandi e confronti tra strategie.
 
 ## 5. Igiene del repository e asset
 

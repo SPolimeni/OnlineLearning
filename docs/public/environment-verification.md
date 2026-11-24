@@ -1,6 +1,6 @@
 # Environment Verification
 
-Verified locally on 2026-10-14 in Windows PowerShell with the repository-local Conda environment at `./env`.
+Verified locally on 2026-11-24 in Windows PowerShell with the repository-local Conda environment at `./env`.
 
 ## Required workflow
 
@@ -10,6 +10,11 @@ Create the environment from the repository root:
 conda env create --prefix .\env --file environment.yml
 conda activate .\env
 ```
+
+The exact package-version audit export captured from the verified environment is
+[environment-lock.txt](../../environment-lock.txt). It is used to compare an
+environment created from `environment.yml`; the supported installation
+mechanism remains Conda because pyFMI and Assimulo require native binaries.
 
 For an existing environment:
 
@@ -47,6 +52,8 @@ The publication validation was rerun in the repository-local environment:
 - `python tests/validate_fmu_baseline.py`: passed the versioned asset hashes and the
   reduced GP baseline for solver status, first optimized control, one controlled
   FMU interval, and cost.
+- `python tests/validate_strategy_baseline.py`: passed the versioned asset hashes,
+  recorded package versions, and reduced NNARX, GP, and BLL trajectory baselines.
 
 The FMU baseline is an implementation-level regression only. It does not
 validate a complete trajectory, other model strategies, exact article results,

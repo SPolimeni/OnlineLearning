@@ -11,11 +11,11 @@ dependencies:
   - numpy=1.26.4
   - opcua=0.98.13
   - pandas=2.3.3
-  - pyfmi
+  - pyfmi=2.21.0
   - pytz=2025.2
   - scikit-learn=1.7.2
-  - scipy=1.15
-  - pip
+  - scipy=1.15.3
+  - pip=26.0.1
   - pip:
       - gpytorch==1.14.2
       - torch==2.9.0

@@ -75,7 +75,7 @@ The debug command is an FMU simulation and does not intentionally use the live I
 python Main_OnlineLearningMPC.py --Model GP
 ```
 
-The runner loads `FMUs/DHN_sim.fmu`, seeds startup buffers, executes the controller loop, and feeds generated controls back to the FMU. pyFMI support is Windows-dependent in the current implementation. This command is a debug simulation, not proof of numerical reproduction of published results; no fixed trajectory baseline, FMU hash, or full provenance record is currently documented.
+The runner loads `FMUs/DHN_sim.fmu`, seeds startup buffers, executes the controller loop, and feeds generated controls back to the FMU. pyFMI support is Windows-dependent in the current implementation. This command is a debug simulation, not proof of numerical reproduction of published results; implementation-level asset hashes and reduced strategy baselines are documented under `docs/public/`.
 
 ## Live integration boundary
 

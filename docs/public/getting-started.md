@@ -15,7 +15,7 @@ conda activate .\env
 
 Keep this Conda environment active for every import, smoke-test, and controller command. In particular, the FMU path requires the Windows-native pyFMI and Assimulo libraries supplied by this environment. An equivalent non-interactive form is `conda run --prefix .\env python <command>`.
 
-The verified local workflow and results are recorded in [environment-verification.md](environment-verification.md). The distinction between source/import reproducibility, implementation-level debug simulation, and exact article-result reproduction is recorded in [reproducibility-matrix.md](reproducibility-matrix.md).
+The verified local workflow and results are recorded in [environment-verification.md](environment-verification.md). The exact package-version audit export is [environment-lock.txt](../../environment-lock.txt). The distinction between source/import reproducibility, implementation-level debug simulation, and exact article-result reproduction is recorded in [reproducibility-matrix.md](reproducibility-matrix.md).
 The authoritative distinction between test, debug, and live execution is
 defined in [execution-modes.md](execution-modes.md).
 
@@ -88,6 +88,17 @@ This command checks asset hashes and one controlled FMU interval against
 [fmu-baseline.json](fmu-baseline.json). It is an implementation-level
 regression, not an article-result baseline.
 
+Validate the reduced baseline for all strategies:
+
+```powershell
+python tests/validate_strategy_baseline.py
+```
+
+This command checks the recorded environment metadata and asset hashes, then
+compares complete measured/predicted trajectories, costs, solver statuses, and
+first controls for `NNARX`, `GP`, and `BLL` against
+[strategy-baseline.json](strategy-baseline.json).
+
 ## 6. Understand the live integration boundary
 
 The retained live boundary can be inspected but is disabled for public execution. An explicit request is rejected:
@@ -110,9 +121,9 @@ Bundled CSV inputs are loaded from `src/utils/data/`. The default neural model i
 
 1. **Inspection:** verify source structure, parameters, bundled input paths, model assets, and architecture without executing plant integrations.
 2. **Smoke test:** run `python smoke_test.py` in the declared Conda environment. This verifies imports only.
-3. **FMU debug simulation:** run the Windows debug command with the required FMU and dependencies. This exercises the offline control path, but exact published-result reproduction is not currently verified.
+3. **FMU debug simulation:** run the Windows debug command with the required FMU and dependencies. The GP interval and reduced three-strategy baselines can be checked with the validation commands above; exact published-result reproduction is not currently verified.
 
-Live execution is a deployment activity, not a reproducibility level. The repository does not yet provide fixed numerical fixtures, expected trajectories, complete asset provenance, or a publication-ready dependency and license record.
+Live execution is a deployment activity, not a reproducibility level. The repository provides implementation-level fixtures, expected trajectories, complete local asset hashes, and an environment audit export; exact article reproduction and publication licensing remain separate release gates.
 
 ## Troubleshooting
 

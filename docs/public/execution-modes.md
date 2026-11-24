@@ -39,6 +39,9 @@ reproduction without fixed inputs, asset hashes, expected outputs, and approved
 tolerances. The separate command `python tests/validate_fmu_baseline.py` validates one
 controlled GP interval against [fmu-baseline.json](fmu-baseline.json), including
 asset hashes, solver status, first control, FMU output, cost, and tolerances.
+The command `python tests/validate_strategy_baseline.py` validates the reduced
+measured/predicted trajectories, costs, solver statuses, and first controls for
+all three strategies against [strategy-baseline.json](strategy-baseline.json).
 
 Live execution is an operational deployment activity, not a test or a
 reproducibility level. The public repository intentionally provides no command

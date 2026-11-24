@@ -1,6 +1,6 @@
 # Asset Provenance Record
 
-This record contains facts measured from the working tree on 2026-10-14. The hashes identify the local files; they do not establish ownership, licensing, or permission to redistribute them.
+This record contains facts measured from the working tree on 2026-11-24. The hashes identify the local files; they do not establish ownership, licensing, or permission to redistribute them.
 
 | Asset | Bytes | SHA-256 | Local provenance | Redistribution status |
 | --- | ---: | --- | --- | --- |
